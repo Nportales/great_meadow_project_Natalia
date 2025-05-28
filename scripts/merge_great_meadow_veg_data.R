@@ -13,10 +13,7 @@ library(dplyr)
 
 #Reading in CSVs as a tibble
 
-VMMI_2015_2023 <- read.csv("data/processed_data/VMMI_2015_2023.csv") %>%
-  as_tibble()
-
-VMMI_2024 <- read.csv("data/processed_data/ACAD_Wetland_VegMMI_20241216.csv") %>%
+VMMI_2015_2024 <- read.csv("data/processed_data/VMMI_2015_2024.csv") %>%
   as_tibble()
 
 ## 2015-2024 Glen Veg data ##
@@ -61,18 +58,6 @@ VMMI_ram_sen <- read.csv("data/processed_data/Kate_NETN_veg_data/vegMMI_2011_to_
 ####    Data Manip   #### 
 #-----------------------#
 
-## merge 2025-2023 and 2024 Glen veg data --------------------------------------
-
-# Remove one column
-VMMI_2024 <- VMMI_2024 %>% select(-X)
-
-# Add site column to 2015-2023 data
-VMMI_2015_2023 <- VMMI_2015_2023 %>% 
-  mutate(Site = "Great Meadow")
-
-# merge 2015-2023 data and 2024 data
-VMMI_2015_2024 <- bind_rows(VMMI_2015_2023, VMMI_2024)
-
 
 ## merge Glen VMMI data with NETN VMMI data ------------------------------------
 
@@ -86,7 +71,11 @@ new_VMMI_2015_2024 <- VMMI_2015_2024 %>%
       case_when(
         grepl("GRME", Code) ~ "GRME",
         grepl("GIME", Code) ~ "GILM",
-        TRUE ~ NA_character_)) %>% 
+        TRUE ~ NA_character_),
+    
+    Location_ID = as.character(Location_ID)
+    
+    ) %>% 
 
     # Remove unneeded columns and rename
     select(site.name = Code,
@@ -100,15 +89,32 @@ new_VMMI_2015_2024 <- VMMI_2015_2024 %>%
            bryo.cov = Bryophyte_Cover,
            strtol.cov = Cover_Tolerant,
            vmmi,
-           vmmi.rating = vmmi_rating,
-           notes = Site)
+           vmmi.rating = vmmi_rating)
 
 # then select appropriate sites from NETN VMMI dataset
 new_VMMI_ram_sen <- VMMI_ram_sen %>% 
-  filter(local.id %in% c("GRME", "GILM")) 
+  filter(local.id %in% c("GRME", "GILM")) %>% 
+  select(-notes)
 
 # then merge datasets
 VMMI_Glen_NETN <- bind_rows(new_VMMI_2015_2024, new_VMMI_ram_sen)
+
+
+
+
+#### GRAVEYARD ####-------------------------------------------------------------
+
+# ## merge 2025-2023 and 2024 Glen veg data ------------------------------------
+# 
+# # Remove one column
+# VMMI_2024 <- VMMI_2024 %>% select(-X)
+# 
+# # Add site column to 2015-2023 data
+# VMMI_2015_2023 <- VMMI_2015_2023 %>% 
+#   mutate(Site = "Great Meadow")
+# 
+# # merge 2015-2023 data and 2024 data
+# VMMI_2015_2024 <- bind_rows(VMMI_2015_2023, VMMI_2024)
 
 
 
