@@ -7,6 +7,7 @@
 library(tidyverse)
 library(dplyr)
 library(lubridate)
+library(sf)
 
 #-----------------------#
 ####    Read Data    ####
@@ -93,7 +94,13 @@ species_list_new <- species_list_2015 %>%
                 Latin_Name == "Brachyelytum aristosum" ~ "Brachyelytrum aristosum",
                 Latin_Name == "Juncus pylaei" ~ "Juncus effusus",
                 Latin_Name == "Utricularia vulgaris" ~ "Utricularua vulgaris",
-                TRUE ~ Latin_Name))
+                TRUE ~ Latin_Name),
+    
+    # fill in panel column with -1
+    Panel = as.numeric(Panel),
+    Panel = replace_na(Panel, -1)
+    
+    )
 
 #check renaming worked
 check_latin_mismatch_list <- anti_join(species_list_new, tlu_Plant, by = "Latin_Name")
@@ -143,7 +150,11 @@ species_by_strata_new <- species_by_strata_2015 %>%
     Latin_Name =
       case_when(Latin_Name == "Frangula alnus" ~ "Rhamnus frangula",
                 Latin_Name == "Alnus incana ssp. rugosa" ~ "Alnus incana",
-                TRUE ~ Latin_Name))
+                TRUE ~ Latin_Name),
+    
+    # fill in panel column with -1
+    Panel = as.numeric(Panel),
+    Panel = replace_na(Panel, -1))
 
 #combine datasets
 # Define the key column
@@ -174,6 +185,10 @@ setdiff(names(species_by_strata_new), names(species_by_strata_tlu))
 #### combine 2024 data with 2015-2023 data ####---------------------------------
 
 ## merge species_by_strata datasets
+# first check all column names are the same
+identical(names(species_by_strata_tlu), names(species_by_strata_2024))
+
+# merge
 species_by_strata_2015_2024 <- bind_rows(species_by_strata_tlu, species_by_strata_2024)
 
 # fix date column format
@@ -183,10 +198,15 @@ species_by_strata_2015_2024$Date <- format(species_by_strata_2015_2024$Date, "%Y
 
 
 
+
 ## merge species_list datasets
+# first check all column names are the same
+identical(names(species_list_tlu), names(species_list_2024))
+
 # convert collected column to same class = integer
 species_list_tlu$Collected <- as.integer(species_list_tlu$Collected)
 species_list_2024$Collected <- as.integer(species_list_2024$Collected)
+
 # merge
 species_list_2015_2024 <- bind_rows(species_list_tlu, species_list_2024)
 
@@ -197,8 +217,52 @@ species_list_2015_2024$Date <- format(species_list_2015_2024$Date, "%Y-%m-%d")
 
 
 
+
 ## merge locations datasets
-locations_2015_2024 <- bind_rows(locations_2015_2023, locations_2024)
+# first check all column names are the same
+identical(names(locations_2015_2023), names(locations_2024))
+
+# fill in panel column with -1
+locations_2015_2023 <- locations_2015_2023 %>% 
+  mutate(Panel = as.numeric(Panel),
+         Panel = replace_na(Panel, -1))
+
+# fix coordinates mistake in locations_2024
+locations_2024_clean <- locations_2024 %>% 
+  mutate(
+    xCoordinate = case_when(
+      Code == "GRME02" ~ 563071,
+      TRUE ~ xCoordinate
+    ),
+    yCoordinate = case_when(
+      Code == "GRME02" ~ 4913162,
+      TRUE ~ yCoordinate
+    ),
+    Latitude = case_when(
+      Code == "GRME02" ~ 44.36899,
+      TRUE ~ Latitude
+    ),
+    Longitude = case_when(
+      Code == "GRME02" ~ -68.20840,
+      TRUE ~ Longitude
+    )
+  )
+
+
+# Add full EPSG code for UTM zone 19N = EPSG:32619
+locations_2015_2023_sf <- st_as_sf(locations_2015_2023, coords = c("xCoordinate", "yCoordinate"), crs = 32619)
+
+# Transform to latitude/longitude (WGS 84)
+locations_2015_2023_latlon <- st_transform(locations_2015_2023_sf, crs = 4326)
+
+# View converted coordinates
+coords <- st_coordinates(locations_2015_2023_latlon)
+locations_2015_2023$Longitude <- coords[, "X"]
+locations_2015_2023$Latitude  <- coords[, "Y"]
+view(locations_2015_2023)
+
+# merge
+locations_2015_2024 <- bind_rows(locations_2015_2023, locations_2024_clean)
 
 # fix date column format
 locations_2015_2024$Date_Established <- parse_date_time(locations_2015_2024$Date_Established, orders = c("ymd", "mdy", "dmy", "Ymd HMS", "mdY", "BdY"))
@@ -207,12 +271,25 @@ locations_2015_2024$Date_Established <- format(locations_2015_2024$Date_Establis
 
 
 
+
+
 ## merge visits datasets
+# first check all column names are the same
+identical(names(visits_2015), names(visits_2024))
+
 # convert visits column to same class = integer
 visits_2015 <- visits_2015 %>%
-  mutate(across(c(Depth_3, DrySeasonWaterTable, FiddlerCrabBurrows, ShallowAquitard), as.integer))
+  mutate(across(c(Depth_3, DrySeasonWaterTable, FiddlerCrabBurrows, ShallowAquitard), as.integer),
+         
+         # fill in panel column with -1
+         Panel = as.numeric(Panel),
+         Panel = replace_na(Panel, -1)
+         
+         )
+
 visits_2024 <- visits_2024 %>%
   mutate(across(c(Depth_3, DrySeasonWaterTable, FiddlerCrabBurrows, ShallowAquitard), as.integer))
+
 # merge
 visits_2015_2024 <- bind_rows(visits_2015, visits_2024)
 
@@ -223,7 +300,18 @@ visits_2015_2024$Date <- format(visits_2015_2024$Date, "%Y-%m-%d")
 
 
 
+
+
 ## merge RAM_stressors datasets
+# first check all column names are the same
+identical(names(RAM_stressors_2015), names(RAM_stressors_2024))
+
+# fill in panel column with -1
+RAM_stressors_2015 <- RAM_stressors_2015 %>% 
+  mutate(Panel = as.numeric(Panel),
+         Panel = replace_na(Panel, -1))
+
+# merge
 RAM_stressors_2015_2024 <- bind_rows(RAM_stressors_2015, RAM_stressors_2024)
 
 # fix date column format
@@ -233,7 +321,17 @@ RAM_stressors_2015_2024$Date <- format(RAM_stressors_2015_2024$Date, "%Y-%m-%d")
 
 
 
+
 ## merge vertical_complexity datasets 
+# first check all column names are the same
+identical(names(vertical_complexity_2015), names(vertical_complexity_2024))
+
+# first fill in panel column with -1
+vertical_complexity_2015 <- vertical_complexity_2015 %>% 
+  mutate(Panel = as.numeric(Panel),
+         Panel = replace_na(Panel, -1))
+
+# merge
 vertical_complexity_2015_2024 <- bind_rows(vertical_complexity_2015, vertical_complexity_2024)
 
 # fix date column format
@@ -247,6 +345,7 @@ vertical_complexity_2015_2024$Date <- format(vertical_complexity_2015_2024$Date,
 # write.csv(species_by_strata_2015_2024, "data/raw_data/Glen_veg_data/species_by_strata_2015_2024.csv", row.names = FALSE)
 # write.csv(species_list_2015_2024, "data/raw_data/Glen_veg_data/species_list_2015_2024.csv", row.names = FALSE)
 # write.csv(locations_2015_2024, "data/raw_data/Glen_veg_data/locations_2015_2024.csv", row.names = FALSE)
+# write.csv(locations_2024_clean, "data/raw_data/Glen_veg_data/locations_2024_clean.csv", row.names = FALSE)
 # write.csv(visits_2015_2024, "data/raw_data/Glen_veg_data/visits_2015_2024.csv", row.names = FALSE)
 # write.csv(RAM_stressors_2015_2024, "data/raw_data/Glen_veg_data/RAM_stressors_2015_2024.csv", row.names = FALSE)
 # write.csv(vertical_complexity_2015_2024, "data/raw_data/Glen_veg_data/vertical_complexity_2015_2024.csv", row.names = FALSE)

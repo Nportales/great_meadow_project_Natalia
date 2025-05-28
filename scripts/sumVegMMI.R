@@ -48,7 +48,7 @@ species_by_strata <- read.csv("data/raw_data/Glen_veg_data/species_by_strata_201
 species_list <- read.csv("data/raw_data/Glen_veg_data/species_list_2015_2024.csv") %>%
   as_tibble()
 
-locations <- read.csv("data/raw_data/Glen_veg_data/locations_2015_2024.csv") %>%
+locations <- read.csv("data/raw_data/Glen_veg_data/locations_2024_clean.csv") %>%
   as_tibble()
 
 visits <- read.csv("data/raw_data/Glen_veg_data/visits_2015_2024.csv") %>%
@@ -65,7 +65,7 @@ vertical_complexity <- read.csv("data/raw_data/Glen_veg_data/vertical_complexity
 ####    Run Function    ####
 #--------------------------#
 
-sumVegMMI <- function(site = "all", panel = NA, years = 2015:2024,
+sumVegMMI <- function(site = "all", panel = -1, years = 2015:2024,
                       QAQC = FALSE){
   
   #---- Error Handling ----
@@ -77,7 +77,7 @@ sumVegMMI <- function(site = "all", panel = NA, years = 2015:2024,
   site <- match.arg(site, c("all", site_list), several.ok = TRUE)
   site <- if(any(site == "all")){site_list} else {site}
   
-  stopifnot(class(panel) %in% c("numeric", "integer", "logical"), all(panel %in% c(1, 2, 3, 4, -1, NA)))
+  stopifnot(class(panel) %in% c("numeric", "integer"), all(panel %in% c(1, 2, 3, 4, -1)))
   stopifnot(class(years) %in% c("numeric", "integer"), years >= 2015)
   stopifnot(class(QAQC) == "logical")
   
