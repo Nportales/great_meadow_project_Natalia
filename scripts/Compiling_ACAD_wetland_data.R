@@ -11,7 +11,7 @@ library(tidyverse)
 
 # Set path for importing and exporting results
 #path = "L:/0409 Vegetation/Veg Observations Inventory & Monitoring/Veg Inventories & Monitoring/Wetland Monitoring/2024_Great_and_Gilmore_Meadow_Data/Data_DRAFT/"
-path = "data/raw_data/Kate_NETN_veg_data/"
+path = "C:/Users/natal/OneDrive/Schoodic Institute/Data Vis Specialist/R/databases_great_meadow/"
 
 # Note: Must have MS Access installed on computer, along with ODBC driver for MS Access. If you don't have MS Access, skip to line 33.
 # Import ACAD data from Great Meadow and Gilmore Meadow from Access database. Scrubbing protected species from export.
@@ -24,14 +24,14 @@ importRAM(type = "dbfile", filepath = paste0(path, "ACAD_RAM_20241216.accdb"),
           export_protected = T, export_data = T, zip = T, export_path = path)
 
 # Renaming default exported file to be ACAD instead of NETN.
-file.rename(paste0(path, "NETN_Wetland_RAM_Data_20250523_NPSonly.zip"),
-            paste0(path, "ACAD_Wetland_RAM_Data_20250523_NPSonly.zip"))
+file.rename(paste0(path, "NETN_Wetland_RAM_Data_20250529_NPSonly.zip"),
+            paste0(path, "ACAD_Wetland_RAM_Data_20250529_NPSonly.zip"))
 
-file.rename(paste0(path, "NETN_Wetland_RAM_Data_20250523_public.zip"),
-            paste0(path, "ACAD_Wetland_RAM_Data_20250523_public.zip"))
+file.rename(paste0(path, "NETN_Wetland_RAM_Data_20250529_public.zip"),
+            paste0(path, "ACAD_Wetland_RAM_Data_20250529_public.zip"))
 
 # If you're not able to run the above code due to issues with ODBC drivers for accdb files, you can just import the zip files.
-importRAM(type = "zip", filepath = paste0(path, "ACAD_Wetland_RAM_Data_20250523_NPSonly.zip"))
+importRAM(type = "zip", filepath = paste0(path, "ACAD_Wetland_RAM_Data_20250529_NPSonly.zip"))
 
 # Calculate vegetation MMI
 vegmmi <- sumVegMMI(panel = -1) |> # used -1 as panel for non-NETN sites
