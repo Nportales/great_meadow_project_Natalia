@@ -47,24 +47,24 @@ library(dplyr)
 
 ## 2013-2015 Glen Veg data ##
 
-species_by_strata_tlu <- read.csv("data/processed_data/species_by_strata_tlu.csv") %>%
+species_by_strata <- read.csv("data/raw_data/Glen_veg_data/species_by_strata_2015_2024.csv") %>%
   as_tibble()
 
-species_list_tlu <- read.csv("data/processed_data/species_list_tlu.csv") %>%
+species_list <- read.csv("data/raw_data/Glen_veg_data/species_list_2015_2024.csv") %>%
   as_tibble()
 
-locations <- read.csv("data/raw_data/Glen_2015_2023_veg_data/locations.csv") %>%
+locations <- read.csv("data/raw_data/Glen_veg_data/locations_2024_clean.csv") %>%
   as_tibble()
 
-visits <- read.csv("data/raw_data/Glen_2015_2023_veg_data/visits.csv") %>%
+visits <- read.csv("data/raw_data/Glen_veg_data/visits_2015_2024.csv") %>%
   as_tibble()
 
-tlu_Plant <- read.csv("data/raw_data/Glen_2015_2023_veg_data/tlu_Plant.csv") %>%
+tlu_Plant <- read.csv("data/raw_data/Glen_veg_data/tlu_Plant.csv") %>%
   as_tibble()
 
 
 
-sumSpeciesList <- function(site = "all", panel = NA, years = 2013:2023,
+sumSpeciesList <- function(site = "all", panel = -1, years = 2015:2024,
                            QAQC = FALSE, species_type = "all", include_protected = T){
 
   #---- Error Handling ----
@@ -76,14 +76,14 @@ sumSpeciesList <- function(site = "all", panel = NA, years = 2013:2023,
   site <- match.arg(site, c("all", site_list), several.ok = TRUE)
   site <- if(any(site == "all")){site_list} else {site}
 
-  stopifnot(class(panel) %in% c("numeric", "integer", "logical"), panel %in% c(1, 2, 3, 4, -1, NA))
-  stopifnot(class(years) %in% c("numeric", "integer"), years >= 2013)
+  stopifnot(class(panel) %in% c("numeric", "integer", "logical"), panel %in% c(1, 2, 3, 4, -1))
+  stopifnot(class(years) %in% c("numeric", "integer"), years >= 2015)
   stopifnot(class(QAQC) == "logical")
   species_type <- match.arg(species_type, c("all", "native", "exotic"))
   stopifnot(class(include_protected) == "logical")
 
   #---- Compile Data ----
-  spplist <- tryCatch(get("species_list_tlu", envir = env)[,c("Code", "Location_ID", "Visit_ID", "Panel", "Date", "Year", "Visit_Type",
+  spplist <- tryCatch(get("species_list", envir = env)[,c("Code", "Location_ID", "Visit_ID", "Panel", "Date", "Year", "Visit_Type",
                                                               "limited_RAM", "TSN", "Latin_Name", "quad_freq")],
                       error = function(e){stop("The tbl_species_list table was not found. Please import wetland RAM views.")}
                       )
@@ -129,5 +129,5 @@ species_list_result <- sumSpeciesList()
 print(species_list_result)
 
 # Save outputs as CSV
-# write.csv(species_list_result, "data/processed_data/species_list_2011_2023.csv", row.names = FALSE)
+# write.csv(species_list_result, "data/processed_data/ACAD_species_list_2015_2024.csv", row.names = FALSE)
 
