@@ -7,6 +7,7 @@
 library(tidyverse)
 library(dplyr)
 library(stringr)
+library(sf)
 
 #-----------------------#
 ####    Read Data    ####
@@ -58,6 +59,25 @@ VMMI_ram_sen <- read.csv("data/processed_data/Kate_NETN_veg_data/vegMMI_2011_to_
 #-----------------------#
 ####    Data Manip   #### 
 #-----------------------#
+
+## load functions
+
+# Convert UTM to lat/lon
+utm_to_latlon <- function(df, x_col = "xcoord", y_col = "ycoord", epsg = 32619) {
+  sf_obj <- st_as_sf(df, coords = c(x_col, y_col), crs = epsg)
+  latlon <- st_transform(sf_obj, crs = 4326)
+  coords <- st_coordinates(latlon)
+  
+  # Remove original UTM columns
+  df[[x_col]] <- NULL
+  df[[y_col]] <- NULL
+  
+  # Add renamed latitude and longitude columns
+  df$longitude <- coords[, "X"]
+  df$latitude  <- coords[, "Y"]
+  
+  df
+}
 
 ## merge Glen VMMI data with NETN VMMI data ------------------------------------
 
@@ -128,7 +148,9 @@ new_VMMI_ram_sen <- VMMI_ram_sen %>%
   rename(wetland = notes)
 
 # then merge datasets
-VMMI_Glen_NETN <- bind_rows(new_VMMI_2015_2024, new_VMMI_ram_sen)
+VMMI_Glen_NETN <- bind_rows(new_VMMI_2015_2024, new_VMMI_ram_sen) %>% 
+  utm_to_latlon() %>% 
+  select(site.name, local.id, site.type, year, latitude, longitude, everything())
 
 # Save outputs as CSV
 # write.csv(VMMI_Glen_NETN, "data/processed_data/VMMI_Glen_NETN_2011_2024.csv", row.names = FALSE)
