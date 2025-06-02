@@ -14,9 +14,6 @@ library(stringr)
 
 #Reading in CSVs as a tibble
 
-VMMI_2015_2024 <- read.csv("data/processed_data/VMMI_2015_2024.csv") %>%
-  as_tibble()
-
 ## 2015-2024 Glen Veg data ##
 
 species_by_strata <- read.csv("data/raw_data/Glen_veg_data/species_by_strata_2015_2024.csv") %>%
@@ -35,6 +32,9 @@ RAM_stressors <- read.csv("data/raw_data/Glen_veg_data/RAM_stressors_2015_2024.c
   as_tibble()
 
 vertical_complexity <- read.csv("data/raw_data/Glen_veg_data/vertical_complexity_2015_2024.csv") %>%
+  as_tibble()
+
+VMMI_2015_2024 <- read.csv("data/processed_data/VMMI_2015_2024.csv") %>%
   as_tibble()
 
 ## Kate Veg data ##
@@ -59,7 +59,6 @@ VMMI_ram_sen <- read.csv("data/processed_data/Kate_NETN_veg_data/vegMMI_2011_to_
 ####    Data Manip   #### 
 #-----------------------#
 
-
 ## merge Glen VMMI data with NETN VMMI data ------------------------------------
 
 # first edit Glen VMMI data columns to match NETN VMMI data columns
@@ -80,10 +79,10 @@ new_VMMI_2015_2024 <- VMMI_2015_2024 %>%
         grepl("GRME08", Code) ~ "RAM",
         grepl("GRME09", Code) ~ "RAM",
         grepl("GRME10", Code) ~ "RAM",
-        grepl("GIME", Code) ~ "GILM",
+        grepl("GIME", Code) ~ "RAM",
         TRUE ~ NA_character_),
     
-    site = 
+    wetland = 
       case_when(
         grepl("GRME", Code) ~ "Great Meadow",
         grepl("GIME", Code) ~ "Gilmore Meadow",
@@ -106,17 +105,33 @@ new_VMMI_2015_2024 <- VMMI_2015_2024 %>%
            strtol.cov = Cover_Tolerant,
            vmmi,
            vmmi.rating = vmmi_rating,
-           site)
+           wetland)
 
 # then select appropriate sites from NETN VMMI dataset
 new_VMMI_ram_sen <- VMMI_ram_sen %>% 
-  filter(site.name %in% c("RAM-31", "RAM-13", "RAM-04", "RAM-19", "NWCA11-R304", "NWCA16-R304", "NWC21-ME-HP304")) %>% 
-  rename(site = notes)
+  mutate(
+    
+    # fix site.name codes
+    site.name =
+      case_when(
+        site.name %in% c("NWCA11-R304", "NWCA16-R304", "NWC21-ME-HP304") ~ "NWCA-R304",
+        TRUE ~ site.name),
+    
+    # standardize wetland names in notes column
+    notes = 
+      case_when(
+        site.name %in% c("RAM-13", "RAM-04", "RAM-19") ~ "Great Meadow",
+        site.name %in% c("RAM-31", "NWCA-R304") ~ "Gilmore Meadow",
+        TRUE ~ NA_character_)) %>% 
+  
+  filter(site.name %in% c("RAM-31", "RAM-13", "RAM-04", "RAM-19", "NWCA-R304")) %>% 
+  rename(wetland = notes)
 
 # then merge datasets
 VMMI_Glen_NETN <- bind_rows(new_VMMI_2015_2024, new_VMMI_ram_sen)
 
-
+# Save outputs as CSV
+# write.csv(VMMI_Glen_NETN, "data/processed_data/VMMI_Glen_NETN_2011_2024.csv", row.names = FALSE)
 
 
 #### GRAVEYARD ####-------------------------------------------------------------
