@@ -165,7 +165,7 @@ gm_wl_stats <- map_dfr(1:6, ~wl_stats_loop(.))
 
 
 ## Gilmore Meadow
-gilm <- tibble(read.csv("data/gilmore_well_prec_data_2013-2022.csv")) %>% 
+gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2022.csv")) %>% 
   rename(gilmore.meadow = GILM_WL)
 
 gil_wl_stats <- calc_WL_stats(gilm, from = 2016, to = 2022)
@@ -183,7 +183,7 @@ wl_table <- wl_stats %>%
 
 
 ## Write out the water level stats
-write_csv(wl_table, "outputs/gm_gl_wl_stats.csv")
+write_csv(wl_table, "data/processed_data/gm_gl_wl_stats.csv")
 
 
 

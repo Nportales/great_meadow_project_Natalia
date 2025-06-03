@@ -38,6 +38,8 @@ vertical_complexity_2015 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_da
 RAM_stressors_2015 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_data/RAM_stressors_2015_2023.csv") %>%
   as_tibble()
 
+AA_char_2015 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_data/AA_char_2015_2023.csv")
+
 
 ## 2024 Glen Veg data ##
 
@@ -58,6 +60,8 @@ vertical_complexity_2024 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_da
 
 RAM_stressors_2024 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_data/RAM_stressors_2024.csv") %>%
   as_tibble()
+
+AA_char_2024 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_data/AA_char_2024.csv")
 
 #-----------------------#
 ####    Data Manip   ####
@@ -267,6 +271,11 @@ vertical_complexity_2015 <- vertical_complexity_2015 %>% fix_panel()
 vertical_complexity_2015_2024 <- safe_bind_rows(vertical_complexity_2015, vertical_complexity_2024) %>%
   format_dates(Date)
 
+# AA_char
+AA_char_2015 <- AA_char_2015 %>% fix_panel()
+AA_char_2015_2024 <- safe_bind_rows(AA_char_2015, AA_char_2024) %>%
+  format_dates(Date)
+
 
 # Save outputs as CSV
 # write.csv(species_by_strata_2015_2024, "data/raw_data/Glen_veg_data/species_by_strata_2015_2024.csv", row.names = FALSE)
@@ -276,10 +285,17 @@ vertical_complexity_2015_2024 <- safe_bind_rows(vertical_complexity_2015, vertic
 # write.csv(visits_2015_2024, "data/raw_data/Glen_veg_data/visits_2015_2024.csv", row.names = FALSE)
 # write.csv(RAM_stressors_2015_2024, "data/raw_data/Glen_veg_data/RAM_stressors_2015_2024.csv", row.names = FALSE)
 # write.csv(vertical_complexity_2015_2024, "data/raw_data/Glen_veg_data/vertical_complexity_2015_2024.csv", row.names = FALSE)
+# write.csv(AA_char_2015_2024, "data/raw_data/Glen_veg_data/AA_char_2015_2024.csv", row.names = FALSE)
+
+
+
+
 
 
 
 #### GRAVEYARD ####-------------------------------------------------------------
+
+
 
 # #### combine 2024 data with 2015-2023 data ####-------------------------------
 # 
