@@ -149,16 +149,17 @@ clean <- combined %>%
 ####             Read and Clean               ####
 #------------------------------------------------#
 
-gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2022.csv")) %>% 
+gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv")) %>% 
+  select(1,2,3,4,5,8,14,15,16) %>% 
   rename_with(tolower) %>% 
-  mutate(timestamp = mdy_hm(timestamp),
+  mutate(timestamp = parse_date_time(timestamp, orders = c("mdy HM", "mdy")),
          date = mdy(date)) %>% 
   select(1,2,4,3,8,5,7,6) %>% 
   rename(precip.cm = precip_cm, water.depth = gilm_wl)
 
 
 ## Write out the clean data
-write.csv(gilm, "data/processed_data/gilmore_meadow_well_data_2024_20250603.csv", row.names = F)
+write.csv(gilm, "data/processed_data/gilmore_meadow_well_data_2024_2025061225.csv", row.names = F)
 
 
 

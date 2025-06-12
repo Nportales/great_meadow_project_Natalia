@@ -75,7 +75,7 @@ AA_char_2024 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_data/AA_char_2
 latin_mismatch_list <- anti_join(species_list_2015, tlu_Plant, by = "Latin_Name")
 
 #search tlu for mismatch latin names
-#search_tlu <- filter(tlu_Plant, Accepted_Latin_Name == "Carex lenticularis")
+search_tlu <- filter(tlu_Plant, Accepted_Latin_Name == "Rhamnus frangula")
 
 #rename latin name species using case_when
 species_list_new <- species_list_2015 %>% 

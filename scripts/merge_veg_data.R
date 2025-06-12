@@ -102,12 +102,17 @@ new_VMMI_2015_2024 <- VMMI_2015_2024 %>%
         grepl("GIME", Code) ~ "RAM",
         TRUE ~ NA_character_),
     
+    # add wetland column
     wetland = 
       case_when(
         grepl("GRME", Code) ~ "Great Meadow",
         grepl("GIME", Code) ~ "Gilmore Meadow",
         TRUE ~ NA_character_),
     
+    # add a source column
+    source = "FOA",
+    
+    # correct column class
     Location_ID = as.character(Location_ID)
     
     ) %>% 
@@ -125,7 +130,8 @@ new_VMMI_2015_2024 <- VMMI_2015_2024 %>%
            strtol.cov = Cover_Tolerant,
            vmmi,
            vmmi.rating = vmmi_rating,
-           wetland)
+           wetland,
+           source)
 
 # then select appropriate sites from NETN VMMI dataset
 new_VMMI_ram_sen <- VMMI_ram_sen %>% 
@@ -142,7 +148,12 @@ new_VMMI_ram_sen <- VMMI_ram_sen %>%
       case_when(
         site.name %in% c("RAM-13", "RAM-04", "RAM-19") ~ "Great Meadow",
         site.name %in% c("RAM-31", "NWCA-R304") ~ "Gilmore Meadow",
-        TRUE ~ NA_character_)) %>% 
+        TRUE ~ NA_character_),
+    
+    # add a source column
+    source = "NETN"
+    
+    ) %>% 
   
   filter(site.name %in% c("RAM-31", "RAM-13", "RAM-04", "RAM-19", "NWCA-R304")) %>% 
   rename(wetland = notes)
