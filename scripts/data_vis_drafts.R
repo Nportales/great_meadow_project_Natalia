@@ -7,6 +7,8 @@
 library(tidyverse)
 library(dplyr)
 library(ggplot2)
+library(broom)
+library(purrr)
 
 #-----------------------#
 ####    Read Data    ####
@@ -16,7 +18,7 @@ library(ggplot2)
 
 ## Veg data ##
 
-VMMI_Glen_NETN <- read.csv("data/processed_data/VMMI_Glen_NETN_2011_2024.csv") %>%
+VMMI_FOA_NETN <- read.csv("data/processed_data/VMMI_FOA_NETN_2011_2024.csv") %>%
   as_tibble()
 
 
@@ -25,7 +27,7 @@ VMMI_Glen_NETN <- read.csv("data/processed_data/VMMI_Glen_NETN_2011_2024.csv") %
 #----------------------------#
 
 # generic plot of VMMI values by site over time
-ggplot(VMMI_Glen_NETN, aes(x = year, y = vmmi, color = site.name, group = site.name)) +
+ggplot(VMMI_FOA_NETN, aes(x = year, y = vmmi, color = site.name, group = site.name)) +
   geom_line(size = 1) +
   geom_point(size = 2) +
   labs(title = "VMMI Trends Over Time by Site",
@@ -35,7 +37,7 @@ ggplot(VMMI_Glen_NETN, aes(x = year, y = vmmi, color = site.name, group = site.n
   theme_minimal()
 
 # facet by wetland
-ggplot(VMMI_Glen_NETN, aes(x = year, y = vmmi, color = site.name, group = site.name)) +
+ggplot(VMMI_FOA_NETN, aes(x = year, y = vmmi, color = site.name, group = site.name)) +
   geom_line(size = 1) +
   geom_point(size = 2) +
   facet_wrap(~ wetland) +  # Facet by wetland
@@ -49,7 +51,7 @@ ggplot(VMMI_Glen_NETN, aes(x = year, y = vmmi, color = site.name, group = site.n
 
 # plot for average VMMI trends per wetland
 # first calculate average VMMI per year per wetland
-wetland_summary <- VMMI_Glen_NETN %>%
+wetland_summary <- VMMI_FOA_NETN %>%
   group_by(wetland, year) %>%
   summarise(mean_vmmi = mean(vmmi, na.rm = TRUE))
 
@@ -62,4 +64,35 @@ ggplot(wetland_summary, aes(x = year, y = mean_vmmi, color = wetland, group = we
        y = "Mean VMMI",
        color = "Wetland") +
   theme_minimal()
+
+
+# plot box plots for summarizing VMMI per year across all sites 
+ggplot(VMMI_FOA_NETN, aes(x = factor(year), y = vmmi)) +
+  geom_boxplot() +
+  facet_wrap(~ wetland) + 
+  labs(title = "Distribution of VMMI by Year",
+       x = "Year", 
+       y = "VMMI") +
+  theme_light()
+
+
+# significance testing
+
+site_models <- VMMI_FOA_NETN %>%
+  group_by(site.name) %>%
+  do(tidy(lm(vmmi ~ year, data = .)))
+
+site_models %>% filter(term == "year")
+
+
+# residuals
+models_nested <- VMMI_FOA_NETN %>%
+  group_by(site.name) %>%
+  nest() %>%
+  mutate(model = map(data, ~lm(vmmi ~ year, data = .)))
+
+# Use `glance()` on each model to get model-level stats (e.g., R², p-value)
+model_summaries <- models_nested %>%
+  mutate(glance_out = map(model, glance)) %>%
+  unnest(glance_out)
 
