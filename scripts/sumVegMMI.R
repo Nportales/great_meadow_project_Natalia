@@ -60,7 +60,6 @@ RAM_stressors <- read.csv("data/raw_data/Glen_veg_data/RAM_stressors_2015_2024.c
 vertical_complexity <- read.csv("data/raw_data/Glen_veg_data/vertical_complexity_2015_2024.csv") %>%
   as_tibble()
 
-
 #--------------------------#
 ####    Run Function    ####
 #--------------------------#

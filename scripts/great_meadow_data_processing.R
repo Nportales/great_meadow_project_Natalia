@@ -184,6 +184,19 @@ setdiff(names(species_by_strata_new), names(species_by_strata_tlu))
 
 
 
+# Fix bryophytes cover column in visits dataset 
+
+visits_2015_clean <- visits_2015 %>%
+  # isolate 2015 and 2020 data
+  left_join(
+    visits_2015 %>% filter(Year == 2020) %>% select(Code, bryo_2020 = Bryophyte_Cover),
+    by = "Code"
+  ) %>%
+  # Replace missing 2015 values with 2020 values
+  mutate(Bryophyte_Cover = ifelse(Year == 2015 & is.na(Bryophyte_Cover), bryo_2020, Bryophyte_Cover)) %>%
+  # Drop helper column
+  select(-bryo_2020)
+
 
 #### combine 2024 data with 2015-2023 data ####---------------------------------
 
@@ -255,12 +268,12 @@ locations_2015_2024 <- safe_bind_rows(locations_2015_2023, locations_2024_clean)
   format_dates(Date_Established)
 
 # Visits
-visits_2015 <- visits_2015 %>%
+visits_2015_clean <- visits_2015_clean %>%
   mutate(across(c(Depth_3, DrySeasonWaterTable, FiddlerCrabBurrows, ShallowAquitard), as.integer)) %>%
   fix_panel()
 visits_2024 <- visits_2024 %>%
   mutate(across(c(Depth_3, DrySeasonWaterTable, FiddlerCrabBurrows, ShallowAquitard), as.integer))
-visits_2015_2024 <- safe_bind_rows(visits_2015, visits_2024) %>% format_dates(Date)
+visits_2015_2024 <- safe_bind_rows(visits_2015_clean, visits_2024) %>% format_dates(Date)
 
 # RAM stressors
 RAM_stressors_2015 <- RAM_stressors_2015 %>% fix_panel()
