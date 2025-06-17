@@ -47,6 +47,18 @@ ggplot(VMMI_FOA_NETN, aes(x = year, y = vmmi, color = site.name, group = site.na
        color = "Site") +
   theme_minimal()
 
+# facet by wetland with threshold VMMI rankings
+ggplot(VMMI_FOA_NETN, aes(x = year, y = vmmi, color = site.name, group = site.name)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = 65.22746, linetype = "dashed", color = "darkgreen") +  # Good
+  geom_hline(yintercept = 52.785, linetype = "dashed", color = "red") +          # Poor
+  facet_wrap(~ wetland) +
+  labs(title = "VMMI Trends Over Time by Site and Wetland",
+       x = "Year",
+       y = "VMMI",
+       color = "Site") +
+  theme_minimal()
 
 
 # plot for average VMMI trends per wetland
