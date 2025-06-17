@@ -64,11 +64,9 @@ VMMI_NETN <- read.csv("data/raw_data/Kate_NETN_veg_data/NETN_vegMMI_allsites_201
 spplist_NETN <- read.csv("data/raw_data/Kate_NETN_veg_data/NETN_spplist_allsites_2011-2024_public.csv") %>% 
   as_tibble()
 
-#-----------------------#
-####    Data Manip   #### 
-#-----------------------#
-
-## load functions
+#---------------------------#
+####    Load Functions   #### 
+#---------------------------#
 
 # Convert UTM to lat/lon
 utm_to_latlon <- function(df, x_col = "xcoord", y_col = "ycoord", epsg = 32619) {
@@ -87,10 +85,13 @@ utm_to_latlon <- function(df, x_col = "xcoord", y_col = "ycoord", epsg = 32619) 
   df
 }
 
+#-----------------------#
+####    Data Manip   #### 
+#-----------------------#
 
-## merge Glen VMMI data with NETN VMMI data ------------------------------------
+## merge FOA VMMI data with NETN VMMI data ------------------------------------
 
-# first edit Glen VMMI data columns to match NETN VMMI data columns
+## FOA VMMI data 
 new_VMMI_FOA <- VMMI_FOA %>% 
   
   mutate(
@@ -126,7 +127,7 @@ new_VMMI_FOA <- VMMI_FOA %>%
     
     ) %>% 
 
-    # Remove unneeded columns and rename
+    # Remove unneeded columns and rename to standardize 
     select(site.name = Code,
            local.id = Location_ID,
            site.type,
@@ -143,8 +144,7 @@ new_VMMI_FOA <- VMMI_FOA %>%
            source)
 
 
-
-# then select appropriate sites from NETN VMMI dataset
+# NETN VMMI data
 new_VMMI_NETN <- VMMI_NETN %>% 
   
   # first filter for great meadow and gilmore meadow sites
@@ -152,7 +152,7 @@ new_VMMI_NETN <- VMMI_NETN %>%
   
   mutate(
     
-    # fix site.name codes
+    # fix code names
     Code = 
       case_when(
       str_detect(Code, "304") ~ "NWCA-R304",
@@ -170,7 +170,7 @@ new_VMMI_NETN <- VMMI_NETN %>%
     
   ) %>% 
   
-  # Remove unneeded columns and rename
+  # Remove unneeded columns and rename to standardize 
   select(site.name = Code,
          local.id = local_id,
          site.type = site_type,
@@ -186,15 +186,127 @@ new_VMMI_NETN <- VMMI_NETN %>%
          wetland = Note,
          source)
 
-# then merge datasets
+# merge FOA and NETN VMMI datasets
 VMMI_FOA_NETN <- bind_rows(new_VMMI_FOA, new_VMMI_NETN) %>% 
   utm_to_latlon() %>% 
   select(site.name, local.id, site.type, year, latitude, longitude, everything())
 
-
 # Save outputs as CSV
 # write.csv(VMMI_FOA_NETN, "data/processed_data/VMMI_FOA_NETN_2011_2024.csv", row.names = FALSE)
 
+
+## merge FOA spplist data with NETN spplist data ------------------------------------
+
+# FOA spplist data 
+new_spplist_FOA <- spplist_FOA %>% 
+  
+  mutate(
+    
+    # add a site type column
+    site.type = 
+      case_when(
+        grepl("GRME01", Code) ~ "Intensive",
+        grepl("GRME02", Code) ~ "Intensive",
+        grepl("GRME03", Code) ~ "Intensive",
+        grepl("GRME04", Code) ~ "Intensive",
+        grepl("GRME05", Code) ~ "Intensive",
+        grepl("GRME06", Code) ~ "Intensive",
+        grepl("GRME07", Code) ~ "RAM",
+        grepl("GRME08", Code) ~ "RAM",
+        grepl("GRME09", Code) ~ "RAM",
+        grepl("GRME10", Code) ~ "RAM",
+        grepl("GIME", Code) ~ "RAM",
+        TRUE ~ NA_character_),
+    
+    # add wetland column
+    wetland = 
+      case_when(
+        grepl("GRME", Code) ~ "Great Meadow",
+        grepl("GIME", Code) ~ "Gilmore Meadow",
+        TRUE ~ NA_character_),
+    
+    # add a source column
+    source = "FOA",
+    
+    # correct column class
+    Location_ID = as.character(Location_ID)
+    
+  ) %>% 
+  
+  # Remove unneeded columns and rename to standardize 
+  select(site.name = Code,
+         local.id = Location_ID,
+         site.type,
+         year = Year,
+         latitude = Latitude,
+         longitude = Longitude,
+         tsn = TSN,
+         plant.code = PLANTS_Code,
+         latin.name = Latin_Name,
+         common.name = Common,
+         quad.freq = quad_freq,
+         invasive = Invasive,
+         protected = Protected_species,
+         coc = CoC_ME_ACAD,
+         coc.wetness = Coef_wetness,
+         wetland,
+         source)
+
+
+# NETN spplist data
+new_spplist_NETN <- spplist_NETN %>% 
+  
+  # first filter for great meadow and gilmore meadow sites
+  filter(Code %in% c("RAM-31", "RAM-13", "RAM-04", "RAM-19") | str_detect(Code, "304")) %>% 
+  
+  mutate(
+    
+    # fix code names
+    Code = 
+      case_when(
+        str_detect(Code, "304") ~ "NWCA-R304",
+        TRUE ~ Code),
+    
+    # standardize wetland names in notes column
+    wetland = 
+      case_when(
+        Code %in% c("RAM-13", "RAM-04", "RAM-19") ~ "Great Meadow",
+        Code %in% c("RAM-31", "NWCA-R304") ~ "Gilmore Meadow",
+        TRUE ~ NA_character_),
+    
+    # add a source column
+    source = "NETN"
+    
+  ) %>% 
+  
+  # Remove unneeded columns and rename to standardize 
+  select(site.name = Code,
+         local.id = local_id,
+         site.type = site_type,
+         year = Year,
+         xcoord = xCoordinate,
+         ycoord = yCoordinate,
+         tsn = TSN,
+         plant.code = PLANTS_Code,
+         latin.name = Latin_Name,
+         common.name = Common,
+         quad.freq = quad_freq,
+         invasive = Invasive,
+         protected = Protected_species,
+         coc = CoC_ME_ACAD,
+         coc.wetness = Coef_wetness,
+         wetland,
+         source) %>% 
+ 
+  # convert coordinates to lat and long  
+  utm_to_latlon()
+    
+# merge FOA and NETN VMMI datasets
+spplist_FOA_NETN <- bind_rows(new_spplist_FOA, new_spplist_NETN) %>% 
+  select(site.name, local.id, site.type, year, latitude, longitude, everything())
+
+# Save outputs as CSV
+# write.csv(spplist_FOA_NETN, "data/processed_data/spplist_FOA_NETN_2011_2024.csv", row.names = FALSE)
 
 
 
