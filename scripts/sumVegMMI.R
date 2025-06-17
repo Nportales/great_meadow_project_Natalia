@@ -143,6 +143,6 @@ VMMI_result <- sumVegMMI()
 print(VMMI_result)
 
 # Save outputs as CSV
-# write.csv(VMMI_result, "data/processed_data/VMMI_2015_2024.csv", row.names = FALSE)
+# write.csv(VMMI_result, "data/processed_data/FOA_VMMI_2015_2024.csv", row.names = FALSE)
 
 

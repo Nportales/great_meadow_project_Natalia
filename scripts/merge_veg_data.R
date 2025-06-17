@@ -17,46 +17,13 @@ library(sf)
 
 ## 2015-2024 Glen Veg data ##
 
-# species_by_strata <- read.csv("data/raw_data/Glen_veg_data/species_by_strata_2015_2024.csv") %>%
-#   as_tibble()
-# 
-# species_list <- read.csv("data/raw_data/Glen_veg_data/species_list_2015_2024.csv") %>%
-#   as_tibble()
-# 
-# locations <- read.csv("data/raw_data/Glen_veg_data/locations_2015_2024.csv") %>%
-#   as_tibble()
-# 
-# visits <- read.csv("data/raw_data/Glen_veg_data/visits_2015_2024.csv") %>%
-#   as_tibble()
-# 
-# RAM_stressors <- read.csv("data/raw_data/Glen_veg_data/RAM_stressors_2015_2024.csv") %>%
-#   as_tibble()
-# 
-# vertical_complexity <- read.csv("data/raw_data/Glen_veg_data/vertical_complexity_2015_2024.csv") %>%
-#   as_tibble()
-
-VMMI_FOA <- read.csv("data/processed_data/VMMI_2015_2024.csv") %>%
+VMMI_FOA <- read.csv("data/processed_data/FOA_VMMI_2015_2024.csv") %>%
   as_tibble()
 
-spplist_FOA <- read.csv("data/processed_data/species_list_2015_2024.csv") %>%
+spplist_FOA <- read.csv("data/processed_data/FOA_species_list_2015_2024.csv") %>%
   as_tibble()
 
 ## Kate Veg data ##
-
-# ram_ssplist <- read.csv("data/processed_data/Kate_NETN_veg_data/ram_spplist_2012_to_2022.csv") %>%
-#   as_tibble()
-# 
-# ram_veg_cover <- read.csv("data/processed_data/Kate_NETN_veg_data/ram_veg_cover_2012_to_2022.csv") %>%
-#   as_tibble()
-# 
-# sen_ram_species <- read.csv("data/processed_data/Kate_NETN_veg_data/sen_ram_species_data_2011_2022.csv") %>%
-#   as_tibble()
-# 
-# sen_veg_cover <- read.csv("data/processed_data/Kate_NETN_veg_data/sen_veg_cover_2011_2016_2021.csv") %>%
-#   as_tibble()
-
-# VMMI_ram_sen <- read.csv("data/processed_data/Kate_NETN_veg_data/vegMMI_2011_to_2023.csv") %>%
-#  as_tibble()
 
 VMMI_NETN <- read.csv("data/raw_data/Kate_NETN_veg_data/NETN_vegMMI_allsites_2011-2024.csv") %>%
   as_tibble()
@@ -192,7 +159,7 @@ VMMI_FOA_NETN <- bind_rows(new_VMMI_FOA, new_VMMI_NETN) %>%
   select(site.name, local.id, site.type, year, latitude, longitude, everything())
 
 # Save outputs as CSV
-# write.csv(VMMI_FOA_NETN, "data/processed_data/VMMI_FOA_NETN_2011_2024.csv", row.names = FALSE)
+# write.csv(VMMI_FOA_NETN, "data/processed_data/FOA_NETN_VMMI_2011_2024.csv", row.names = FALSE)
 
 
 ## merge FOA spplist data with NETN spplist data ------------------------------------
@@ -306,7 +273,7 @@ spplist_FOA_NETN <- bind_rows(new_spplist_FOA, new_spplist_NETN) %>%
   select(site.name, local.id, site.type, year, latitude, longitude, everything())
 
 # Save outputs as CSV
-# write.csv(spplist_FOA_NETN, "data/processed_data/spplist_FOA_NETN_2011_2024.csv", row.names = FALSE)
+# write.csv(spplist_FOA_NETN, "data/processed_data/FOA_NETN_species_list_2011_2024.csv", row.names = FALSE)
 
 
 

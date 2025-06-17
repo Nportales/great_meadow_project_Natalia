@@ -134,5 +134,5 @@ species_list_final <- species_list_result %>%
   mutate(Site = ifelse(grepl("GIME", Code), "Gilmore Meadow", "Great Meadow"))
 
 # Save outputs as CSV
-# write.csv(species_list_final, "data/processed_data/species_list_2015_2024.csv", row.names = FALSE)
+# write.csv(species_list_final, "data/processed_data/FOA_species_list_2015_2024.csv", row.names = FALSE)
 
