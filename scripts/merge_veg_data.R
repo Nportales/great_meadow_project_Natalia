@@ -35,7 +35,10 @@ library(sf)
 # vertical_complexity <- read.csv("data/raw_data/Glen_veg_data/vertical_complexity_2015_2024.csv") %>%
 #   as_tibble()
 
-VMMI_2015_2024 <- read.csv("data/processed_data/VMMI_2015_2024.csv") %>%
+VMMI_FOA <- read.csv("data/processed_data/VMMI_2015_2024.csv") %>%
+  as_tibble()
+
+spplist_FOA <- read.csv("data/processed_data/species_list_2015_2024.csv") %>%
   as_tibble()
 
 ## Kate Veg data ##
@@ -52,9 +55,14 @@ VMMI_2015_2024 <- read.csv("data/processed_data/VMMI_2015_2024.csv") %>%
 # sen_veg_cover <- read.csv("data/processed_data/Kate_NETN_veg_data/sen_veg_cover_2011_2016_2021.csv") %>%
 #   as_tibble()
 
-VMMI_ram_sen <- read.csv("data/processed_data/Kate_NETN_veg_data/vegMMI_2011_to_2023.csv") %>%
+# VMMI_ram_sen <- read.csv("data/processed_data/Kate_NETN_veg_data/vegMMI_2011_to_2023.csv") %>%
+#  as_tibble()
+
+VMMI_NETN <- read.csv("data/raw_data/Kate_NETN_veg_data/NETN_vegMMI_allsites_2011-2024.csv") %>%
   as_tibble()
 
+spplist_NETN <- read.csv("data/raw_data/Kate_NETN_veg_data/NETN_spplist_allsites_2011-2024_public.csv") %>% 
+  as_tibble()
 
 #-----------------------#
 ####    Data Manip   #### 
@@ -79,10 +87,11 @@ utm_to_latlon <- function(df, x_col = "xcoord", y_col = "ycoord", epsg = 32619) 
   df
 }
 
+
 ## merge Glen VMMI data with NETN VMMI data ------------------------------------
 
 # first edit Glen VMMI data columns to match NETN VMMI data columns
-new_VMMI_2015_2024 <- VMMI_2015_2024 %>% 
+new_VMMI_FOA <- VMMI_FOA %>% 
   
   mutate(
     
@@ -133,38 +142,60 @@ new_VMMI_2015_2024 <- VMMI_2015_2024 %>%
            wetland,
            source)
 
+
+
 # then select appropriate sites from NETN VMMI dataset
-new_VMMI_ram_sen <- VMMI_ram_sen %>% 
+new_VMMI_NETN <- VMMI_NETN %>% 
+  
+  # first filter for great meadow and gilmore meadow sites
+  filter(Code %in% c("RAM-31", "RAM-13", "RAM-04", "RAM-19") | str_detect(Code, "304")) %>% 
+  
   mutate(
     
     # fix site.name codes
-    site.name =
+    Code = 
       case_when(
-        site.name %in% c("NWCA11-R304", "NWCA16-R304", "NWC21-ME-HP304") ~ "NWCA-R304",
-        TRUE ~ site.name),
+      str_detect(Code, "304") ~ "NWCA-R304",
+      TRUE ~ Code),
     
     # standardize wetland names in notes column
-    notes = 
+    Note = 
       case_when(
-        site.name %in% c("RAM-13", "RAM-04", "RAM-19") ~ "Great Meadow",
-        site.name %in% c("RAM-31", "NWCA-R304") ~ "Gilmore Meadow",
+        Code %in% c("RAM-13", "RAM-04", "RAM-19") ~ "Great Meadow",
+        Code %in% c("RAM-31", "NWCA-R304") ~ "Gilmore Meadow",
         TRUE ~ NA_character_),
     
     # add a source column
     source = "NETN"
     
-    ) %>% 
+  ) %>% 
   
-  filter(site.name %in% c("RAM-31", "RAM-13", "RAM-04", "RAM-19", "NWCA-R304")) %>% 
-  rename(wetland = notes)
+  # Remove unneeded columns and rename
+  select(site.name = Code,
+         local.id = local_id,
+         site.type = site_type,
+         year = Year,
+         xcoord = xCoordinate,
+         ycoord = yCoordinate,
+         mean.coc = meanC,
+         inv.cov = Invasive_Cover,
+         bryo.cov = Bryophyte_Cover,
+         strtol.cov = Cover_Tolerant,
+         vmmi,
+         vmmi.rating = vmmi_rating,
+         wetland = Note,
+         source)
 
 # then merge datasets
-VMMI_FOA_NETN <- bind_rows(new_VMMI_2015_2024, new_VMMI_ram_sen) %>% 
+VMMI_FOA_NETN <- bind_rows(new_VMMI_FOA, new_VMMI_NETN) %>% 
   utm_to_latlon() %>% 
   select(site.name, local.id, site.type, year, latitude, longitude, everything())
 
+
 # Save outputs as CSV
 # write.csv(VMMI_FOA_NETN, "data/processed_data/VMMI_FOA_NETN_2011_2024.csv", row.names = FALSE)
+
+
 
 
 #### GRAVEYARD ####-------------------------------------------------------------
@@ -180,6 +211,39 @@ VMMI_FOA_NETN <- bind_rows(new_VMMI_2015_2024, new_VMMI_ram_sen) %>%
 # 
 # # merge 2015-2023 data and 2024 data
 # VMMI_2015_2024 <- bind_rows(VMMI_2015_2023, VMMI_2024)
+
+
+
+# # then select appropriate sites from NETN VMMI dataset
+# new_VMMI_ram_sen <- VMMI_ram_sen %>% 
+#   mutate(
+#     
+#     # fix site.name codes
+#     site.name =
+#       case_when(
+#         site.name %in% c("NWCA11-R304", "NWCA16-R304", "NWC21-ME-HP304") ~ "NWCA-R304",
+#         TRUE ~ site.name),
+#     
+#     # standardize wetland names in notes column
+#     notes = 
+#       case_when(
+#         site.name %in% c("RAM-13", "RAM-04", "RAM-19") ~ "Great Meadow",
+#         site.name %in% c("RAM-31", "NWCA-R304") ~ "Gilmore Meadow",
+#         TRUE ~ NA_character_),
+#     
+#     # add a source column
+#     source = "NETN"
+#     
+#   ) %>% 
+#   
+#   filter(site.name %in% c("RAM-31", "RAM-13", "RAM-04", "RAM-19", "NWCA-R304")) %>% 
+#   rename(wetland = notes)
+# 
+# # then merge datasets
+# VMMI_FOA_NETN <- bind_rows(new_VMMI_2015_2024, new_VMMI_ram_sen) %>% 
+#   utm_to_latlon() %>% 
+#   select(site.name, local.id, site.type, year, latitude, longitude, everything())
+# 
 
 
 
