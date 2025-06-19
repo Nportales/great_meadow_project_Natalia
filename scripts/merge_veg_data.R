@@ -25,10 +25,10 @@ spplist_FOA <- read.csv("data/processed_data/FOA_species_list_2015_2024.csv") %>
 
 ## Kate Veg data ##
 
-VMMI_NETN <- read.csv("data/raw_data/Kate_NETN_veg_data/NETN_vegMMI_allsites_2011-2024.csv") %>%
+VMMI_NETN <- read.csv("data/processed_data/NETN_vegMMI_allsites_2011-2024.csv") %>%
   as_tibble()
 
-spplist_NETN <- read.csv("data/raw_data/Kate_NETN_veg_data/NETN_spplist_allsites_2011-2024_public.csv") %>% 
+spplist_NETN <- read.csv("data/processed_data/NETN_spplist_allsites_2011-2024_public.csv") %>% 
   as_tibble()
 
 #---------------------------#
