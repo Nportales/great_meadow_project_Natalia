@@ -18,7 +18,7 @@ library(purrr)
 
 ## Veg data ##
 
-VMMI_FOA_NETN <- read.csv("data/processed_data/VMMI_FOA_NETN_2011_2024.csv") %>%
+VMMI_FOA_NETN <- read.csv("data/processed_data/FOA_NETN_VMMI_2011_2024.csv") %>%
   as_tibble()
 
 
