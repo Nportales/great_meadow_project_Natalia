@@ -67,9 +67,9 @@ AA_char_2024 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_data/AA_char_2
 ####    Data Manip   ####
 #-----------------------#
 
-## 2013-2015 Glen Veg data ## --------------------------------------------------
+#### 2013-2015 Glen Veg data ####
 
-## combine tlu_Plant to species.list by common columns
+## combine tlu_Plant with species.list by common columns------------------------
 
 #first find latin names that are in species_list and not in tlu_Plant
 latin_mismatch_list <- anti_join(species_list_2015, tlu_Plant, by = "Latin_Name")
@@ -141,8 +141,7 @@ mutate(
 
 
 
-
-## combine tlu_Plant to species_by_strata by common columns---------------------
+## combine tlu_Plant with species_by_strata by common columns-------------------
 
 #first find latin names that are in species_by_strata and not in tlu_Plant
 strata_latin_mismatch <- anti_join(species_by_strata_2015, tlu_Plant, by = "Latin_Name")
@@ -184,7 +183,7 @@ setdiff(names(species_by_strata_new), names(species_by_strata_tlu))
 
 
 
-# Fix bryophytes cover column in visits dataset 
+# Fix bryophyte cover column in visits dataset--------------------------------- 
 
 visits_2015_clean <- visits_2015 %>%
   # isolate 2015 and 2020 data
@@ -196,6 +195,8 @@ visits_2015_clean <- visits_2015 %>%
   mutate(Bryophyte_Cover = ifelse(Year == 2015 & is.na(Bryophyte_Cover), bryo_2020, Bryophyte_Cover)) %>%
   # Drop helper column
   select(-bryo_2020)
+
+
 
 
 #### combine 2024 data with 2015-2023 data ####---------------------------------
