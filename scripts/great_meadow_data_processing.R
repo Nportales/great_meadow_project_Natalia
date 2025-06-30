@@ -63,6 +63,12 @@ RAM_stressors_2024 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_data/RAM
 
 AA_char_2024 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_data/AA_char_2024.csv")
 
+
+## site data ##
+
+sites <- read.csv("data/raw_data/monitoring_sites_GRME_GIME_metadata.csv")
+
+
 #-----------------------#
 ####    Data Manip   ####
 #-----------------------#
@@ -303,8 +309,31 @@ AA_char_2015_2024 <- safe_bind_rows(AA_char_2015, AA_char_2024) %>%
 
 
 
+#### change coordinates for site data ####--------------------------------------
 
+# Convert UTM to lat/lon
+convert_latlon <- function(df, x_col = "xcoord", y_col = "ycoord", epsg = 32619) {
+  sf_obj <- st_as_sf(df, coords = c(x_col, y_col), crs = epsg)
+  latlon <- st_transform(sf_obj, crs = 4326)
+  coords <- st_coordinates(latlon)
+  df$longitude <- coords[, "X"]
+  df$latitude  <- coords[, "Y"]
+  df
+}
 
+sites.clean <- sites %>% 
+  convert_latlon() %>% 
+  select(site.name = site.ID,
+         latitude,
+         longitude,
+         site.type,
+         park.unit,
+         wetland.name,
+         source
+         )
+
+# Save outputs as CSV
+# write.csv(sites.clean, "data/processed_data/monitoring_sites.csv", row.names = FALSE)
 
 
 #### GRAVEYARD ####-------------------------------------------------------------
