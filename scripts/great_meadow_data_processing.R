@@ -323,17 +323,16 @@ convert_latlon <- function(df, x_col = "xcoord", y_col = "ycoord", epsg = 32619)
 
 sites.clean <- sites %>% 
   convert_latlon() %>% 
-  select(site.name = site.ID,
+  select(site.name,
          latitude,
          longitude,
          site.type,
-         park.unit,
          wetland.name,
          source
          )
 
 # Save outputs as CSV
-# write.csv(sites.clean, "data/processed_data/monitoring_sites.csv", row.names = FALSE)
+# \write.csv(sites.clean, "data/processed_data/monitoring_sites.csv", row.names = FALSE)
 
 
 #### GRAVEYARD ####-------------------------------------------------------------
