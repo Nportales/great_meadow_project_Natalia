@@ -272,8 +272,14 @@ new_spplist_NETN <- spplist_NETN %>%
 spplist_FOA_NETN <- bind_rows(new_spplist_FOA, new_spplist_NETN) %>% 
   select(site.name, local.id, site.type, year, latitude, longitude, everything())
 
+# filter out NAs and error values
+
+clean_spplist_FOA_NETN <- spplist_FOA_NETN[
+  !is.na(spplist_FOA_NETN$tsn) & !grepl("^\\-999", as.character(spplist_FOA_NETN$tsn)),
+]
+
 # Save outputs as CSV
-# write.csv(spplist_FOA_NETN, "data/processed_data/FOA_NETN_species_list_2011_2024.csv", row.names = FALSE)
+# write.csv(clean_spplist_FOA_NETN, "data/processed_data/FOA_NETN_species_list_2011_2024.csv", row.names = FALSE)
 
 
 
