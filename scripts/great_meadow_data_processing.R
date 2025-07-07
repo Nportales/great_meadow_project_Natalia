@@ -270,7 +270,9 @@ species_list_2015_2024 <- bind_rows(
 
 # Locations
 locations_2015_2023 <- locations_2015_2023 %>% fix_panel() %>% utm_to_latlon()
-locations_2024_clean <- locations_2024 %>% fix_coordinates("GRME02", 563071, 4913162, 44.36899, -68.20840)
+locations_2024_clean <- locations_2024 %>% 
+  fix_coordinates("GRME02", 563071, 4913162, 44.36899, -68.20840) %>% 
+  fix_coordinates("GRME08", 563371, 4912986, 44.36738, -68.20466)
 locations_2015_2024 <- safe_bind_rows(locations_2015_2023, locations_2024_clean) %>%
   format_dates(Date_Established)
 
@@ -332,7 +334,7 @@ sites.clean <- sites %>%
          )
 
 # Save outputs as CSV
-# \write.csv(sites.clean, "data/processed_data/monitoring_sites.csv", row.names = FALSE)
+# write.csv(sites.clean, "data/processed_data/monitoring_sites.csv", row.names = FALSE)
 
 
 #### GRAVEYARD ####-------------------------------------------------------------

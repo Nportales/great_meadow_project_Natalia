@@ -31,6 +31,10 @@ VMMI_NETN <- read.csv("data/processed_data/NETN_vegMMI_allsites_2011-2024.csv") 
 spplist_NETN <- read.csv("data/processed_data/NETN_spplist_allsites_2011-2024_public.csv") %>% 
   as_tibble()
 
+## sites data ##
+
+monitoring_sites <- read.csv("data/processed_data/monitoring_sites.csv") %>% as_tibble()
+
 #---------------------------#
 ####    Load Functions   #### 
 #---------------------------#
@@ -51,6 +55,18 @@ utm_to_latlon <- function(df, x_col = "xcoord", y_col = "ycoord", epsg = 32619) 
   
   df
 }
+
+# QA function to check spatial coordinates
+qa_check_coords <- function(df, sites_df) {
+  df %>%
+    left_join(sites_df, by = "site.name", suffix = c(".data", ".expected")) %>%
+    mutate(
+      lat_diff = abs(latitude.data - latitude.expected),
+      lon_diff = abs(longitude.data - longitude.expected),
+      coord_match = lat_diff < 0.00001 & lon_diff < 0.00001
+    )
+}
+
 
 #-----------------------#
 ####    Data Manip   #### 
@@ -157,6 +173,34 @@ new_VMMI_NETN <- VMMI_NETN %>%
 VMMI_FOA_NETN <- bind_rows(new_VMMI_FOA, new_VMMI_NETN) %>% 
   utm_to_latlon() %>% 
   select(site.name, local.id, site.type, year, latitude, longitude, everything())
+
+# call QA check for coords
+qa_vmmi <- qa_check_coords(VMMI_FOA_NETN, monitoring_sites)
+
+  # fix any coords that mismatch
+  # join and replace mismatched coordinates
+  vmmi_corrected <- VMMI_FOA_NETN %>%
+    left_join(monitoring_sites, by = "site.name", suffix = c(".data", ".fix")) %>%
+    mutate(
+      latitude = if_else(abs(latitude.data - latitude.fix) > 0.00001, latitude.fix, latitude.data),
+      longitude = if_else(abs(longitude.data - longitude.fix) > 0.00001, longitude.fix, longitude.data)
+    ) %>%
+    select(-ends_with(".fix"), -latitude.data, -longitude.data) %>% 
+    select(site.name,
+           local.id,
+           site.type = site.type.data,
+           year,
+           latitude,
+           longitude,
+           mean.coc,
+           inv.cov,
+           bryo.cov,
+           strtol.cov,
+           vmmi,
+           vmmi.rating,
+           wetland,
+           source = source.data)
+  
 
 # Save outputs as CSV
 # write.csv(VMMI_FOA_NETN, "data/processed_data/FOA_NETN_VMMI_2011_2024.csv", row.names = FALSE)
@@ -277,6 +321,38 @@ spplist_FOA_NETN <- bind_rows(new_spplist_FOA, new_spplist_NETN) %>%
 clean_spplist_FOA_NETN <- spplist_FOA_NETN[
   !is.na(spplist_FOA_NETN$tsn) & !grepl("^\\-999", as.character(spplist_FOA_NETN$tsn)),
 ]
+
+# call QA check for coords
+qa_spplist <- qa_check_coords(clean_spplist_FOA_NETN, monitoring_sites)
+
+  # fix any coords that mismatch
+  # join and replace mismatched coordinates
+  spplist_corrected <- clean_spplist_FOA_NETN %>%
+    left_join(monitoring_sites, by = "site.name", suffix = c(".data", ".fix")) %>%
+    mutate(
+      latitude = if_else(abs(latitude.data - latitude.fix) > 0.00001, latitude.fix, latitude.data),
+      longitude = if_else(abs(longitude.data - longitude.fix) > 0.00001, longitude.fix, longitude.data)
+    ) %>%
+    select(-ends_with(".fix"), -latitude.data, -longitude.data) %>% 
+    select(site.name,
+           local.id,
+           site.type = site.type.data,
+           year,
+           latitude,
+           longitude,
+           tsn,
+           plant.code,
+           latin.name,
+           common.name,
+           quad.freq,
+           invasive,
+           protected,
+           coc,
+           coc.wetness,
+           wetland,
+           source = source.data)
+  
+
 
 # Save outputs as CSV
 # write.csv(clean_spplist_FOA_NETN, "data/processed_data/FOA_NETN_species_list_2011_2024.csv", row.names = FALSE)
