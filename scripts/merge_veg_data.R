@@ -203,7 +203,7 @@ qa_vmmi <- qa_check_coords(VMMI_FOA_NETN, monitoring_sites)
   
 
 # Save outputs as CSV
-# write.csv(VMMI_FOA_NETN, "data/processed_data/FOA_NETN_VMMI_2011_2024.csv", row.names = FALSE)
+# write.csv(vmmi_corrected, "data/processed_data/FOA_NETN_VMMI_2011_2024.csv", row.names = FALSE)
 
 
 ## merge FOA spplist data with NETN spplist data ------------------------------------
@@ -355,7 +355,7 @@ qa_spplist <- qa_check_coords(clean_spplist_FOA_NETN, monitoring_sites)
 
 
 # Save outputs as CSV
-# write.csv(clean_spplist_FOA_NETN, "data/processed_data/FOA_NETN_species_list_2011_2024.csv", row.names = FALSE)
+# write.csv(spplist_corrected, "data/processed_data/FOA_NETN_species_list_2011_2024.csv", row.names = FALSE)
 
 
 
