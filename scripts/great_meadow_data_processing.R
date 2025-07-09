@@ -81,7 +81,7 @@ sites <- read.csv("data/raw_data/monitoring_sites_GRME_GIME_metadata.csv")
 latin_mismatch_list <- anti_join(species_list_2015, tlu_Plant, by = "Latin_Name")
 
 #search tlu for mismatch latin names
-search_tlu <- filter(tlu_Plant, Accepted_Latin_Name == "Rhamnus frangula")
+search_tlu <- filter(tlu_Plant, Latin_Name == "Utricularua vulgaris")
 
 #rename latin name species using case_when
 species_list_new <- species_list_2015 %>% 
@@ -133,13 +133,6 @@ species_list_tlu <- species_list_new %>%
 
 #check that the same columns were kept in dataset 1
 setdiff(names(species_list_new), names(species_list_tlu))
-
-#fix latin name again
-species_list_tlu <- species_list_tlu %>% 
-mutate(
-  Latin_Name =
-    case_when(Latin_Name == "Utricularua vulgaris" ~ "Utricularia vulgaris",
-              TRUE ~ Latin_Name))          
 
 # Save outputs as CSV
 # write.csv(species_list_tlu, "data/processed_data/species_list_tlu_2015_2023.csv", row.names = FALSE)

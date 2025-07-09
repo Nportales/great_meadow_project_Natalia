@@ -358,25 +358,44 @@ qa_spplist <- qa_check_coords(clean_spplist_FOA_NETN, monitoring_sites)
 # write.csv(spplist_corrected, "data/processed_data/FOA_NETN_species_list_2011_2024.csv", row.names = FALSE)
 
 
+## species list table for pop-up on arcgis map
+
+spplist_arcgis <- spplist_corrected %>%
+  group_by(site.name, latin.name, common.name, invasive) %>%
+  summarize(
+    years.found = paste(sort(unique(year)), collapse = ", "),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    invasive = ifelse(invasive, "Yes", "No")
+  )
+
+# export for joining to spatial data
+# write.csv(spplist_arcgis, "data/processed_data/species_list_arcgis.csv", row.names = FALSE)
+
+
+
+#### GRAVEYARD ####-------------------------------------------------------------
+
 
 ## build pop-up tables for arcgis maps -----------------------------------------
 
 # build HTML table for pop-up per site
-VMMI_popup <- VMMI_FOA_NETN %>%
-  arrange(year) %>%
-  mutate(row = paste0(
-    "<tr><td>", year, "</td><td>", mean.coc, "</td><td>", inv.cov, "</td><td>",
-    bryo.cov, "</td><td>", strtol.cov, "</td><td>", vmmi, "</td><td>", vmmi.rating, "</td></tr>"
-  )) %>%
-  group_by(site.name) %>%
-  summarise(
-    vmmi_popup = paste0(
-      "<b>VMMI Summary</b><br><table border='1'><tr><th>Year</th><th>mean.coc</th><th>inv.cov</th><th>bryo.cov</th><th>strtol.cov</th><th>vmmi</th><th>rating</th></tr>",
-      paste(row, collapse = ""),
-      "</table>"
-    ),
-    .groups = "drop"
-  )
+# VMMI_popup <- VMMI_FOA_NETN %>%
+#   arrange(year) %>%
+#   mutate(row = paste0(
+#     "<tr><td>", year, "</td><td>", mean.coc, "</td><td>", inv.cov, "</td><td>",
+#     bryo.cov, "</td><td>", strtol.cov, "</td><td>", vmmi, "</td><td>", vmmi.rating, "</td></tr>"
+#   )) %>%
+#   group_by(site.name) %>%
+#   summarise(
+#     vmmi_popup = paste0(
+#       "<b>VMMI Summary</b><br><table border='1'><tr><th>Year</th><th>mean.coc</th><th>inv.cov</th><th>bryo.cov</th><th>strtol.cov</th><th>vmmi</th><th>rating</th></tr>",
+#       paste(row, collapse = ""),
+#       "</table>"
+#     ),
+#     .groups = "drop"
+#   )
 
 # export for joining to spatial data
 # write.csv(VMMI_popup, "data/processed_data/vmmi_popup_per_site.csv", row.names = FALSE)
@@ -384,27 +403,24 @@ VMMI_popup <- VMMI_FOA_NETN %>%
 
 ## species lists format for pop-up on arcgis map
 
-species_lists_popup <- clean_spplist_FOA_NETN %>%
-  group_by(site.name, latin.name, common.name, invasive) %>%
-  summarize(years_found = paste(sort(unique(year)), collapse = ", "), .groups = "drop") %>%
-  group_by(site.name) %>%
-  summarize(
-    species_popup = paste0(
-      "<table border='1'><tr><th>Latin Name</th><th>Common Name</th><th>Invasive?</th><th>Years Found</th></tr>",
-      paste(
-        "<tr><td>", latin.name, "</td><td>", common.name, "</td><td>", ifelse(invasive, "Yes", "No"), "</td><td>", years_found, "</td></tr>",
-        collapse = ""),
-      "</table>"
-    )
-  )
+# species_lists_popup <- clean_spplist_FOA_NETN %>%
+#   group_by(site.name, latin.name, common.name, invasive) %>%
+#   summarize(years_found = paste(sort(unique(year)), collapse = ", "), .groups = "drop") %>%
+#   group_by(site.name) %>%
+#   summarize(
+#     species_popup = paste0(
+#       "<table border='1'><tr><th>Latin Name</th><th>Common Name</th><th>Invasive?</th><th>Years Found</th></tr>",
+#       paste(
+#         "<tr><td>", latin.name, "</td><td>", common.name, "</td><td>", ifelse(invasive, "Yes", "No"), "</td><td>", years_found, "</td></tr>",
+#         collapse = ""),
+#       "</table>"
+#     )
+#   )
 
 # export for joining to spatial data
 # write.csv(species_lists_popup, "data/processed_data/species_list_popup_per_site.csv", row.names = FALSE)
 
 
-
-
-#### GRAVEYARD ####-------------------------------------------------------------
 
 # ## merge 2025-2023 and 2024 Glen veg data ------------------------------------
 # 
