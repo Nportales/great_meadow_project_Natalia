@@ -21,6 +21,8 @@ library(purrr)
 VMMI_FOA_NETN <- read.csv("data/processed_data/FOA_NETN_VMMI_2011_2024.csv") %>%
   as_tibble()
 
+species_list <- read.csv("data/processed_data/FOA_NETN_species_list_2011_2024.csv")
+
 
 #----------------------------#
 ####    Plot Generation   #### 
@@ -107,4 +109,27 @@ models_nested <- VMMI_FOA_NETN %>%
 model_summaries <- models_nested %>%
   mutate(glance_out = map(model, glance)) %>%
   unnest(glance_out)
+
+
+# graph invasive species by year
+
+summary_table <- species_list %>%
+  filter(invasive == "TRUE", ) %>%
+  group_by(year) %>%
+  summarise(
+    count = n_distinct(latin.name),
+    invasive_species = paste(unique(latin.name), collapse = ", ")
+  )
+
+
+# ggplot(summary_table, aes(x = factor(year), y = count)) +
+#   geom_bar(stat = "identity", fill = "tomato") +
+#   labs(
+#     title = "Number of Invasive Species by Year",
+#     x = "Year",
+#     y = "Number of Invasive Species"
+#   ) +
+#   theme_minimal()
+
+
 
