@@ -133,7 +133,7 @@ plot_hydro_site_year <- function(df, yvar, site, years = 2013:as.numeric(format(
 
 ### Water Level Calculations
 ## Read in the data and format for running through Kate's function
-gmwell <- tibble(read.csv("data/processed_data/great_meadow_well_data_2024_20250520.csv")) %>% 
+gmwell <- tibble(read.csv("data/processed_data/great_meadow_well_data_2024_20250715.csv")) %>% 
   rename(Date = date, Year = year, precip_cm = precip.cm) %>% 
   select(timestamp, Date, doy, Year, precip_cm, water.depth, lag.precip, hr, doy_h, plot.num) %>% 
   mutate(timestamp = as_datetime(timestamp),
@@ -205,7 +205,17 @@ gm <- gmwell %>%
 
 ## Gilmore Meadow
 gl <- gilm %>% 
-  mutate(site = paste("Gilmore Meadow"))
+  mutate(site = paste("Gilmore Meadow")) %>% 
+  select(timestamp, 
+         Date,
+         doy,
+         Year,
+         precip_cm,
+         water.depth = gilmore.meadow,
+         lag.precip,
+         hr,
+         doy_h,
+         site)
 
 ## Create a list of the sites to plot
 site.list <- gm %>% 

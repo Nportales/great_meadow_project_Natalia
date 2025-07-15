@@ -16,12 +16,14 @@ library(lubridate)
 
 ## Read in the raw sheet from the data file
 
-raw <- readxl::read_excel("data/raw_data/hydrology_data/GREAT MEADOW Full Data & New Graphs 2024 May.xlsx", sheet = "Full Data to May 2024")
+raw <- readxl::read_excel("data/raw_data/hydrology_data/GREAT MEADOW Full Data & New Graphs 2024 October(1).xlsx", sheet = "Full Data to Oct 2024")
 
+# raw <- readxl::read_excel("data/raw_data/hydrology_data/GREAT MEADOW Full Data & New Graphs 2024 May.xlsx", sheet = "Full Data to May 2024")
 
 ## Pair down the clutter and fix timestamps
+
 slim <- raw %>% 
-  select(-c(1:3, 7:12, 18)) %>%
+  select(-c(1:2, 6:11, 17)) %>%
   rename(timestamp = `Date Time, GMT-04:00`, abs.pres = `Abs Pres, kPa (from AirLogger in Great Meadow)`, temp = `Temp, °F (from AirLogger in Great Meadow)`, year = `Year {=TEXT(r37490,"yyyy")}`,
          precip.cm = `Precip.cm`, daily.precip = `Precip Daily  (Calculated in pivot and vlookup back in on date & 23:00 time)`,
          data.complete = DataComplete) %>%
@@ -30,6 +32,17 @@ slim <- raw %>%
   select(1, 50, everything()) %>%
   filter(!is.na(timestamp)) # ensure that you aren't removing data here! Just meant to clean up extra rows
 
+
+# slim <- raw %>% 
+#   select(-c(1:3, 7:12, 18)) %>%
+#   rename(timestamp = `Date Time, GMT-04:00`, abs.pres = `Abs Pres, kPa (from AirLogger in Great Meadow)`, temp = `Temp, °F (from AirLogger in Great Meadow)`, year = `Year {=TEXT(r37490,"yyyy")}`,
+#          precip.cm = `Precip.cm`, daily.precip = `Precip Daily  (Calculated in pivot and vlookup back in on date & 23:00 time)`,
+#          data.complete = DataComplete) %>%
+#   mutate(timestamp = coalesce(timestamp, `Plot3 Date Time`),
+#          date = as.Date(str_extract(timestamp, "^\\d*\\-\\d*\\-\\d\\d"))) %>%
+#   select(1, 50, everything()) %>%
+#   filter(!is.na(timestamp)) # ensure that you aren't removing data here! Just meant to clean up extra rows
+# 
 
 #-------------------------------------------------#
 ####  Cleaning and converting to long format   ####
@@ -43,7 +56,7 @@ plot1 <- slim %>%
   rename(logger.pressure = `Plot1 Logger Pressure`, logger.temp = `Plot1 logger temp`, 
          baro.pressure = `Plot1 BaroPress`, cor.logger.depth = `Plot1 Original Corrected Logger Depth`,
          filt.cor.logger.depth = `Plot1 FINAL Corrected Logger Depth`,
-         error.correct = `Removed data for erroneous points....24`) %>% 
+         error.correct = `Removed data for erroneous points....23`) %>% 
   select(1:8, 15, everything()) %>% 
   mutate(error.correct = as.character(error.correct))
 
@@ -55,7 +68,7 @@ plot2 <- slim %>%
   rename(logger.pressure = `Plot2 Logger Pressure`, logger.temp = `Plot2 logger temp`, 
          baro.pressure = `Plot2 BaroPress`, cor.logger.depth = `Plot2 Original Corrected Logger Depth`,
          filt.cor.logger.depth = `Plot2 Filtered Corrected & Corrected Logger Depth`,
-         error.correct = `Removed data for erroneous points....31`) %>% 
+         error.correct = `Removed data for erroneous points....30`) %>% 
   select(1:8, 15, everything()) %>% 
   mutate(error.correct = as.character(error.correct))
 
@@ -67,7 +80,7 @@ plot3 <- slim %>%
   rename(logger.pressure = `Plot3 Logger Pressure`, logger.temp = `Plot3 logger temp`, 
          baro.pressure = `Plot3 BaroPress`, cor.logger.depth = `Plot3 Original Corrected Logger Depth`,
          filt.cor.logger.depth = `Plot3 Filtered Corrected & Corrected Logger Depth`,
-         error.correct = `Removed data for erroneous points....38`) %>% 
+         error.correct = `Removed data for erroneous points....37`) %>% 
   select(1:8, 15, everything()) %>% 
   mutate(error.correct = as.character(error.correct))
 
@@ -79,7 +92,7 @@ plot4 <- slim %>%
   rename(logger.pressure = `Plot4 Logger Pressure`, logger.temp = `Plot4 logger temp`, 
          baro.pressure = `Plot4 BaroPress`, cor.logger.depth = `Plot4 Original Corrected Logger Depth`,
          filt.cor.logger.depth = `Plot4 Filtered Corrected & Corrected Logger Depth`,
-         error.correct = `Removed data for erroneous points....45`) %>% 
+         error.correct = `Removed data for erroneous points....44`) %>% 
   select(1:8, 15, everything()) %>% 
   mutate(error.correct = as.character(error.correct))
 
@@ -91,7 +104,7 @@ plot5 <- slim %>%
   rename(logger.pressure = `Plot5 Logger Pressure`, logger.temp = `Plot5 logger temp`, 
          baro.pressure = `Plot5 BaroPress`, cor.logger.depth = `Plot5 Original Corrected Logger Depth`,
          filt.cor.logger.depth = `Plot5 Filtered Corrected & Corrected Logger Depth`,
-         error.correct = `Removed data for erroneous points....52`) %>% 
+         error.correct = `Removed data for erroneous points....51`) %>% 
   select(1:8, 15, everything()) %>% 
   mutate(error.correct = as.character(error.correct))
 
@@ -103,7 +116,7 @@ plot6 <- slim %>%
   rename(logger.pressure = `Plot6 Logger Pressure`, logger.temp = `Plot6 logger temp`, 
          baro.pressure = `Plot6 BaroPress`, cor.logger.depth = `Plot6 Corrected Logger Depth`,
          filt.cor.logger.depth = `Plot6 Filtered Corrected Logger Depth`,
-         error.correct = `Removed data for erroneous points....59`) %>% 
+         error.correct = `Removed data for erroneous points....58`) %>% 
   select(1:8, 15, everything()) %>% 
   mutate(error.correct = as.character(error.correct))
 
@@ -138,7 +151,7 @@ clean <- combined %>%
 
 
 ## Write out the clean data
-# write.csv(clean, "data/processed_data/great_meadow_well_data_2024_20250520.csv", row.names = F)
+# write.csv(clean, "data/processed_data/great_meadow_well_data_2024_20250715.csv", row.names = F)
 
 
 
@@ -159,7 +172,7 @@ gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_201
 
 
 ## Write out the clean data
-write.csv(gilm, "data/processed_data/gilmore_meadow_well_data_2024_2025061225.csv", row.names = F)
+# write.csv(gilm, "data/processed_data/gilmore_meadow_well_data_2024_2025061225.csv", row.names = F)
 
 
 
