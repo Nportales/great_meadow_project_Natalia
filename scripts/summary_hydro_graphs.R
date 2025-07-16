@@ -183,7 +183,7 @@ wl_table <- wl_stats %>%
 
 
 ## Write out the water level stats
-write_csv(wl_table, "data/processed_data/gm_gl_wl_stats.csv")
+# write_csv(wl_table, "data/processed_data/gm_gl_wl_stats.csv")
 
 
 
@@ -202,6 +202,7 @@ gm <- gmwell %>%
          water.depth = ifelse(Year == 2021 & plot.num == 3 & doy == 225 &
                                 water.depth > 400, NA, water.depth)) %>% 
   mutate(site = paste("Great Meadow", plot.num))
+
 
 ## Gilmore Meadow
 gl <- gilm %>% 
@@ -312,3 +313,69 @@ hydrograph <- function (siteyear) {
 map(site.list, ~hydrograph(.))
 
 
+
+# re-write function to produce a summary dataset instead
+hydrograph_data_all <- function() {
+  
+  # Filter Great Meadow data for growing season
+  gm_clean <- gm %>%
+    filter(doy > 134 & doy < 275) %>%
+    select(site, doy_h, water.depth, Year, lag.precip) %>%
+    droplevels()
+  colnames(gm_clean) <- c('SiteName', 'doy_h', 'WL', 'Year', 'lag.precip')
+  gm_clean$Wetland <- "Great Meadow"
+  
+  # Filter Gilmore Meadow data for growing season
+  gl_clean <- gl %>%
+    filter(doy > 134 & doy < 275) %>%
+    select(site, doy_h, water.depth, Year, lag.precip) %>%
+    droplevels()
+  colnames(gl_clean) <- c('SiteName', 'doy_h', 'WL', 'Year', 'lag.precip')
+  gl_clean$Wetland <- "Gilmore Meadow"
+  
+  # Combine datasets
+  combined_data <- bind_rows(gm_clean, gl_clean)
+  
+  return(combined_data)
+}
+
+# Example usage:
+all_hydro_data <- hydrograph_data_all()
+head(all_hydro_data)
+
+# add spatial coordinates
+
+all_hydro_data_spatial <- all_hydro_data %>%
+  mutate(
+    latitude = case_when(
+      SiteName == "Great Meadow 1" ~ 44.36388384,
+      SiteName == "Great Meadow 2" ~ 44.36899219,
+      SiteName == "Great Meadow 3" ~ 44.36615998,
+      SiteName == "Great Meadow 4" ~ 44.36662963,
+      SiteName == "Great Meadow 5" ~ 44.36589325,
+      SiteName == "Great Meadow 6" ~ 44.36684591,
+      SiteName == "Great Meadow 7" ~ 44.36355581,
+      SiteName == "Great Meadow 8" ~ 44.36738168,
+      SiteName == "Great Meadow 9" ~ 44.36540975,
+      SiteName == "Great Meadow 10" ~ 44.36705864,
+      SiteName == "Gilmore Meadow" ~ 44.36275069,
+      TRUE ~ NA_real_
+    ),
+    longitude = case_when(
+      SiteName == "Great Meadow 1" ~ -68.20786916,
+      SiteName == "Great Meadow 2" ~ -68.20840276,
+      SiteName == "Great Meadow 3" ~ -68.21154082,
+      SiteName == "Great Meadow 4" ~ -68.21045519,
+      SiteName == "Great Meadow 5" ~ -68.20682552,
+      SiteName == "Great Meadow 6" ~ -68.20918469,
+      SiteName == "Great Meadow 7" ~ -68.20860147,
+      SiteName == "Great Meadow 8" ~ -68.20465929,
+      SiteName == "Great Meadow 9" ~ -68.20980642,
+      SiteName == "Great Meadow 10" ~ -68.20610696,
+      SiteName == "Gilmore Meadow" ~ -68.27162355,
+      TRUE ~ NA_real_
+    )
+  )
+
+
+# write_csv(all_hydro_data_spatial, "data/processed_data/hydro_wl_data.csv")
