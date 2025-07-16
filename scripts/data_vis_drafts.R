@@ -9,6 +9,7 @@ library(dplyr)
 library(ggplot2)
 library(broom)
 library(purrr)
+library(rcompanion)
 
 #-----------------------#
 ####    Read Data    ####
@@ -90,7 +91,7 @@ ggplot(VMMI_FOA_NETN, aes(x = factor(year), y = vmmi)) +
   theme_light()
 
 
-# significance testing
+# significance testing ---------------------------------------------------------
 
 site_models <- VMMI_FOA_NETN %>%
   group_by(site.name) %>%
@@ -110,8 +111,65 @@ model_summaries <- models_nested %>%
   mutate(glance_out = map(model, glance)) %>%
   unnest(glance_out)
 
+# stats testing Gilmore vs Great Meadow
 
-# graph invasive species by year
+wet1 <- VMMI_FOA_NETN$vmmi[VMMI_FOA_NETN$wetland == "Great Meadow"]
+wet2 <- VMMI_FOA_NETN$vmmi[VMMI_FOA_NETN$wetland == "Gilmore Meadow"]
+
+# normality
+shapiro.test(wet1)
+shapiro.test(wet2)
+
+# equal variances
+var.test(wet1, wet2)  # F-test
+  # sample sizes are not equal; variances are NOT equal
+
+# non-parametric test (doesn’t assume normality or equal variances)
+# Mann–Whitney U test for independent samples
+wilcox.test(wet1, wet2, exact = FALSE)
+
+# calculate rank-biserial correlation (effect size)
+# Combine data
+values <- c(wet1, wet2)
+group <- c(rep("Wetland1", length(wet1)), rep("Wetland2", length(wet2)))
+# Compute rank-biserial correlation
+wilcoxonR(x = values, g = group)
+
+
+# Combine data into one dataframe
+df_plot <- data.frame(
+  VMMI = c(wet1, wet2),
+  Wetland = c(rep("Wetland 1", length(wet1)), rep("Wetland 2", length(wet2)))
+)
+
+# Run Wilcoxon test
+test <- wilcox.test(wet1, wet2, exact = FALSE)
+
+# Calculate effect size (r)
+p <- test$p.value
+N <- length(wet1) + length(wet2)
+r <- abs(qnorm(p / 2)) / sqrt(N)
+
+# Create boxplot
+p_plot <- ggplot(df_plot, aes(x = Wetland, y = VMMI, fill = Wetland)) +
+  geom_boxplot(alpha = 0.7, width = 0.6) +
+  geom_jitter(width = 0.15, alpha = 0.6) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "VMMI Comparison Between Wetlands",
+       subtitle = paste0("Wilcoxon p = ", signif(test$p.value, 3),
+                         " | Effect size r = ", round(r, 3),
+                         " (", ifelse(r < 0.3, "Small",
+                                      ifelse(r < 0.5, "Medium", "Large")), ")"),
+       y = "VMMI Score",
+       x = "")
+
+# Display plot
+print(p_plot)
+
+
+
+# graph invasive species by year -----------------------------------------------
 
 summary_table <- species_list %>%
   filter(invasive == "TRUE", ) %>%
