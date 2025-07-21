@@ -363,7 +363,7 @@ qa_spplist <- qa_check_coords(clean_spplist_FOA_NETN, monitoring_sites)
 spplist_arcgis <- spplist_corrected %>%
   group_by(site.name, latin.name, common.name, invasive) %>%
   summarize(
-    years.found = paste(sort(unique(year)), collapse = ", "),
+    years.observed = paste(sort(unique(year)), collapse = ", "),
     .groups = "drop"
   ) %>%
   mutate(
@@ -372,6 +372,27 @@ spplist_arcgis <- spplist_corrected %>%
 
 # export for joining to spatial data
 # write.csv(spplist_arcgis, "data/processed_data/species_list_arcgis.csv", row.names = FALSE)
+
+## species list table for pop-up with lat and long
+spplist_arcgis_2 <- spplist_corrected %>%
+  group_by(site.name, latin.name, common.name, invasive) %>%
+  summarize(
+    years.observed = paste(sort(unique(year)), collapse = ", "),
+    site.type = first(site.type),
+    lat_vals  = n_distinct(latitude, na.rm = TRUE),
+    long_vals = n_distinct(longitude, na.rm = TRUE),
+    latitude  = first(latitude),
+    longitude = first(longitude),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    invasive = if_else(invasive, "Yes", "No"),
+    coord_warning = lat_vals > 1 | long_vals > 1) %>%
+  select(-lat_vals, -long_vals
+         ,-coord_warning)  # drop checks if you don't need them
+
+# export for joining to spatial data
+# write.csv(spplist_arcgis_2, "data/processed_data/species_list_arcgis_latlong.csv", row.names = FALSE)
 
 
 
