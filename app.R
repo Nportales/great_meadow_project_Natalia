@@ -1,4 +1,3 @@
-# Load packages
 library(shiny)
 library(tidyverse)
 library(lubridate)
@@ -32,8 +31,15 @@ all_data <- bind_rows(gm, gl) %>%
   filter(Year >= 2016 & Year <= 2023) 
 
 wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>% 
-  select(year, stat, gilmore.meadow, great.meadow.1, great.meadow.2, 
-         great.meadow.3, great.meadow.4, great.meadow.5, great.meadow.6) %>% 
+  select(year,
+         stat, 
+         `Gilmore Meadow` = gilmore.meadow, 
+         `Great Meadow 1` = great.meadow.1, 
+         `Great Meadow 2` = great.meadow.2, 
+         `Great Meadow 3` = great.meadow.3, 
+         `Great Meadow 4` = great.meadow.4, 
+         `Great Meadow 5` = great.meadow.5, 
+         `Great Meadow 6` = great.meadow.6) %>% 
   pivot_longer(cols = -c(year, stat), names_to = "site", values_to = "value") %>% 
   pivot_wider(names_from = stat, values_from = value) %>%
   arrange(site, year)
@@ -55,16 +61,32 @@ ui <- fluidPage(
                   choices = sort(unique(all_data$site[grepl("Great Meadow", all_data$site)])),
                   selected = "Great Meadow 1"),
       
-      selectInput("site", "Select Site(s) for Water Level Stats:",
+      pickerInput("site", "Select Site(s) for Water Level Stats:",
                   choices = sort(unique(wl_stats$site)),
-                  selected = "great.meadow.1",
-                  multiple = TRUE)
+                  selected = "Great Meadow 1",
+                  multiple = TRUE,
+                  options = list(
+                    `actions-box` = TRUE,
+                    `deselect-all-text` = "Clear all",
+                    `select-all-text` = "Select all",
+                    `none-selected-text` = "Choose site(s)"
+                  ))
     ),
     mainPanel(
-      plotOutput("hydrograph", height = "600px"),
-      br(),
-      h4("Growing Season Water Level Statistics"),
-      dataTableOutput("wl_stats")
+      plotOutput("hydrograph", height = "600px", brush = brushOpts(id = "hydro_brush"))
+    )
+  ),
+  
+  fluidRow(
+    column(width = 10, offset = 1, align = "center",
+           h4("Selected Data Points"),
+           tableOutput("brush_info"))
+  ),
+  
+  fluidRow(
+    column(width = 10, offset = 1, align = "center",
+           h4("Growing Season Water Level Statistics"),
+           dataTableOutput("wl_stats")
     )
   )
 )
@@ -125,26 +147,42 @@ server <- function(input, output, session) {
     wrap_plots(plot_list, ncol = 1)
   })
   
+  # selected data output table
+  output$brush_info <- renderTable({
+    req(input$hydro_brush)
+    
+    # Subset relevant data
+    brushedPoints(
+      all_data %>% filter(site %in% c(input$gm_site, "Gilmore Meadow"),
+                          Year %in% input$year),
+      brush = input$hydro_brush,
+      xvar = "doy_h",
+      yvar = "water.depth"
+    ) %>%
+      select(site, Year, doy_h, water.depth, precip_cm)
+  })
+  
+  # WL stats output table
   output$wl_stats <- DT::renderDataTable({
     req(input$site, input$year)
     
     wl_stats %>%
       filter(site %in% input$site, year %in% input$year) %>% 
-      rename(
+      mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
+      select(
         Year = year,
         Site = site,
         `Mean Water Level` = WL_mean,
         `SD Water Level` = WL_sd,
         `Minimum Water Level` = WL_min,
         `Maximum Water Level` = WL_max,
-        `Maximum Water Level` = sd,
-        `Maximum hourly increase` = max_inc,
-        `Maximum hourly decrease` = max_dec,
+        `Maximum Hourly Increase` = max_inc,
+        `Maximum Hourly Decrease` = max_dec,
         `Growing Season Change` = GS_change,
-        `GS % surface water` = prop_GS_comp,
-        `GS % over 30cm deep` = prop_over_0cm,
-        `GS % within 30cm` = prop_bet_0_neg30cm,
-        `GS % over 30cm deep` = prop_under_neg30cm
+        `GS % Complete Data` = prop_GS_comp,
+        `GS % Surface Water` = prop_over_0cm,
+        `GS % Within 30cm` = prop_bet_0_neg30cm,
+        `GS % Over 30cm Deep` = prop_under_neg30cm
       )
   })
   
