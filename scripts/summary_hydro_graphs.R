@@ -218,6 +218,7 @@ gl <- gilm %>%
          doy_h,
          site)
 
+
 ## Create a list of the sites to plot
 site.list <- gm %>% 
   select(site) %>% 
