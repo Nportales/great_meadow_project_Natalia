@@ -4,6 +4,7 @@ library(lubridate)
 library(patchwork)
 library(shinyWidgets)
 library(DT)
+library(bslib)
 
 # Read & prepare your processed data (from your current script)
 gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250715.csv") %>%
@@ -67,50 +68,199 @@ wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>%
   arrange(site, year)
 
 
-# UI
-ui <- fluidPage(
-  titlePanel("Wetland Hydrograph Viewer"),
-  sidebarLayout(
-    sidebarPanel(
-      pickerInput("year", "Select Year(s):",
-                  choices = sort(unique(all_data$Year)),
-                  selected = 2023,
-                  multiple = TRUE,
-                  options = list(`actions-box` = TRUE,
-                                 `deselect-all-text` = "Clear all",
-                                 `select-all-text` = "Select all",
-                                 `none-selected-text` = "Choose year(s)")),
-      selectInput("gm_site", "Select Great Meadow Plot for Hydrograph:",
-                  choices = sort(unique(all_data$site[grepl("Great Meadow", all_data$site)])),
-                  selected = "Great Meadow 1"),
+# UI with improved styling
+ui <- page_fluid(
+  theme = bs_theme(
+    version = 5,
+    bootswatch = "flatly",
+    primary = "#2C5F41",
+    secondary = "#5A9B7C", 
+    success = "#27ae60",
+    info = "#3498db",
+    warning = "#f39c12",
+    danger = "#e74c3c",
+    base_font = font_google("Open Sans"),
+    heading_font = font_google("Roboto", wght = c(400, 700))
+  ),
+  
+  # Custom CSS for additional styling
+  tags$head(
+    tags$style(HTML("
+      .content-section {
+        margin: 30px 0;
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border-left: 5px solid #2C5F41;
+      }
       
-      pickerInput("site", "Select Site(s) for Water Level Stats:",
-                  choices = sort(unique(wl_stats$site)),
-                  selected = "Great Meadow 1",
-                  multiple = TRUE,
-                  options = list(
-                    `actions-box` = TRUE,
-                    `deselect-all-text` = "Clear all",
-                    `select-all-text` = "Select all",
-                    `none-selected-text` = "Choose site(s)"
-                  ))
-    ),
-    mainPanel(
-      plotOutput("hydrograph", height = "600px", brush = brushOpts(id = "hydro_brush"))
-    )
+      .section-title {
+        color: #2C5F41;
+        font-weight: 600;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #5A9B7C;
+      }
+      
+      .sidebar-custom {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border: 1px solid #dee2e6;
+      }
+      
+      .main-title {
+        background: linear-gradient(135deg, #2C5F41 0%, #5A9B7C 100%);
+        color: white;
+        padding: 30px;
+        margin: -15px -15px 30px -15px;
+        text-align: center;
+        border-radius: 0 0 20px 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      
+      .brush-info-section {
+        background: linear-gradient(135deg, #e8f4f8 0%, #f0f8ff 100%);
+        border-radius: 12px;
+        padding: 20px;
+        margin: 20px 0;
+        border: 1px solid #5A9B7C;
+      }
+      
+      .stats-main {
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+      }
+      
+    "))
   ),
   
-  fluidRow(
-    column(width = 10, offset = 1, align = "center",
-           h4("Selected Data Points"),
-           tableOutput("brush_info"))
+  # Main title with gradient background
+  div(class = "main-title",
+      h1("Wetland Hydrograph Visualizer", 
+         style = "margin: 0; font-size: 2.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3)")
   ),
   
-  fluidRow(
-    column(width = 10, offset = 1, align = "center",
-           h4("Growing Season Water Level Statistics"),
-           dataTableOutput("wl_stats")
-    )
+  # First section: Hydrograph with improved styling
+  div(class = "content-section",
+      h2("Wetland Hydrograph Analysis", class = "section-title"),
+      layout_sidebar(
+        sidebar = sidebar(
+          class = "sidebar-custom",
+          width = 300,
+          h4("Chart Controls", style = "color: #2C5F41; margin-bottom: 20px;"),
+          
+          selectInput("gm_site", 
+                      label = div(icon("map-marker"), "Select a Great Meadow Site:"),
+                      choices = sort(unique(all_data$site[grepl("Great Meadow", all_data$site)])),
+                      selected = "Great Meadow 1"),
+          
+          br(),
+          pickerInput("year", 
+                      label = div(icon("calendar"), "Select Year(s):"),
+                      choices = sort(unique(all_data$Year)),
+                      selected = 2023,
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `deselect-all-text` = "Clear all",
+                        `select-all-text` = "Select all",
+                        `none-selected-text` = "Choose year(s)",
+                        `live-search` = TRUE,
+                        style = "btn-outline-primary"
+                      )),
+          
+          br(),
+          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Use the brush tool to select data points on the chart for detailed analysis.", 
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;"))
+        ),
+        
+        card(
+          full_screen = TRUE,
+          card_header(
+            class = "bg-primary text-white",
+            "Hydrographs by Year"
+          ),
+          plotOutput("hydrograph", height = "600px", 
+                     brush = brushOpts(id = "hydro_brush", fill = "#5A9B7C", opacity = 0.3))
+        )
+      )
+  ),
+  
+  # Selected data points section with improved styling
+  div(class = "brush-info-section",
+      div(class = "row",
+          div(class = "col-12",
+              h3("Selected Data Points:", 
+                 style = "color: #2C5F41; text-align: center; margin-bottom: 20px;"),
+              card(
+                card_header(
+                  class = "bg-info text-white",
+                  "Detailed View of Brushed Data"
+                ),
+                tableOutput("brush_info")
+              )
+          )
+      )
+  ),
+  
+  # Second section: Water Level Stats with improved styling
+  div(class = "content-section stats-main",
+      h2("Water Level Statistics", class = "section-title"),
+      layout_sidebar(
+        sidebar = sidebar(
+          class = "sidebar-custom",
+          width = 300,
+          h4("Statistics Controls", style = "color: #2C5F41; margin-bottom: 20px;"),
+          
+          pickerInput("stats_site", 
+                      label = div(icon("map-marker"), "Select Site(s):"),
+                      choices = sort(unique(wl_stats$site)),
+                      selected = "Great Meadow 1",
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `deselect-all-text` = "Clear all",
+                        `select-all-text` = "Select all",
+                        `none-selected-text` = "Choose site(s)",
+                        `live-search` = TRUE,
+                        style = "btn-outline-primary"
+                      )),
+          
+          br(),
+          
+          pickerInput("stats_year", 
+                      label = div(icon("calendar"), "Select Years:"),
+                      choices = sort(unique(wl_stats$year)),
+                      selected = c(2022, 2023),
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `deselect-all-text` = "Clear all",
+                        `select-all-text` = "Select all",
+                        `none-selected-text` = "Choose year(s)",
+                        `live-search` = TRUE,
+                        style = "btn-outline-primary"
+                      )),
+          
+          br(),
+          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Growing Season statistics calculated from May through October.", 
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;"))
+        ),
+        
+        card(
+          full_screen = TRUE,
+          card_header(
+            class = "bg-primary text-white",
+            "Growing Season Water Level Statistics"
+          ),
+          div(style = "padding: 10px;",
+              dataTableOutput("wl_stats"))
+        )
+      )
   )
 )
 
@@ -143,6 +293,8 @@ server <- function(input, output, session) {
       left_join(plot_data_filtered, by = "Year") %>%
       mutate(precip_y = lag.precip * 5 + min_water)
     
+    global_min_water <- min(plot_data_filtered$water.depth, na.rm = TRUE)
+    
     # Create the plot using facet_wrap instead of patchwork
     ggplot() +
       # Water level lines
@@ -154,8 +306,7 @@ server <- function(input, output, session) {
                 size = 0.7) +
       # Precipitation line
       geom_line(data = precip_data,
-                aes(x = doy_h, y = precip_y),
-                color = "blue", size = 0.7) +
+                aes(x = doy_h, y = precip_y, color = "Precipitation"), size = 0.7) +
       # Ground level reference
       geom_hline(yintercept = 0, color = "brown") +
       
@@ -163,13 +314,21 @@ server <- function(input, output, session) {
       facet_wrap(~ Year, ncol = 1, scales = "free_y") +
       
       # Styling
-      scale_color_manual(values = setNames(c("black", "darkgray"), 
-                                           c(input$gm_site, "Gilmore Meadow"))) +
-      labs(title = "Hydrographs by Year",
-           x = "Day of Year", y = "Water Level (cm)") +
+      scale_color_manual(values = c(
+        setNames("black", input$gm_site),
+        "Gilmore Meadow" = "darkgray",
+        "Precipitation" = "blue"
+      )) +
+      labs(title = NULL,
+           x = "Date", y = "Water Level (cm)") +
       scale_x_continuous(
         breaks = c(121, 152, 182, 213, 244, 274),
         labels = c('May-01', 'Jun-01', 'Jul-01', 'Aug-01', 'Sep-01', 'Oct-01')) +
+      scale_y_continuous(
+        name = "Water Level (cm)",
+        sec.axis = sec_axis(~ (. - global_min_water) / 5,
+                            name = "Hourly Precip. (cm)",
+                            breaks = seq(0, 8, by = 2))) +
       theme_bw() +
       theme(legend.position = "bottom",
             legend.title = element_blank(),
@@ -242,10 +401,10 @@ server <- function(input, output, session) {
   
   # WL stats output table
   output$wl_stats <- DT::renderDataTable({
-    req(input$site, input$year)
+    req(input$stats_site, input$stats_year)
     
     wl_stats %>%
-      filter(site %in% input$site, year %in% input$year) %>% 
+      filter(site %in% input$stats_site, year %in% input$stats_year) %>% 
       mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
       select(
         Year = year,
@@ -257,14 +416,16 @@ server <- function(input, output, session) {
         `Maximum Hourly Increase` = max_inc,
         `Maximum Hourly Decrease` = max_dec,
         `Growing Season Change` = GS_change,
-        `GS % Complete Data` = prop_GS_comp,
         `GS % Surface Water` = prop_over_0cm,
         `GS % Within 30cm` = prop_bet_0_neg30cm,
-        `GS % Over 30cm Deep` = prop_under_neg30cm
+        `GS % Over 30cm Deep` = prop_under_neg30cm,
+        `GS % Complete Data` = prop_GS_comp
       )
   }, options = list(pageLength = 10, scrollX = TRUE))
 }
 
 # Run app
 shinyApp(ui, server)
+
+
 
