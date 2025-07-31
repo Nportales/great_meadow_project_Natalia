@@ -68,14 +68,14 @@ wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>%
   arrange(site, year)
 
 
-# UI with improved styling
+# UI 
 ui <- page_fluid(
   theme = bs_theme(
     version = 5,
     bootswatch = "flatly",
-    primary = "#2C5F41",
-    secondary = "#5A9B7C", 
-    success = "#27ae60",
+    primary = "#1B365D",
+    secondary = "#4C6D9A",    
+    success = "#2E86C1",
     info = "#3498db",
     warning = "#f39c12",
     danger = "#e74c3c",
@@ -92,15 +92,15 @@ ui <- page_fluid(
         border-radius: 15px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-        border-left: 5px solid #2C5F41;
+        border: 2px solid #1B365D;
       }
       
       .section-title {
-        color: #2C5F41;
+        color: #1B365D;
         font-weight: 600;
         margin-bottom: 20px;
         padding-bottom: 10px;
-        border-bottom: 2px solid #5A9B7C;
+        border-bottom: 2px solid #4C6D9A;
       }
       
       .sidebar-custom {
@@ -112,7 +112,7 @@ ui <- page_fluid(
       }
       
       .main-title {
-        background: linear-gradient(135deg, #2C5F41 0%, #5A9B7C 100%);
+        background: linear-gradient(135deg, #1B365D 0%, #4C6D9A 100%);
         color: white;
         padding: 30px;
         margin: -15px -15px 30px -15px;
@@ -126,11 +126,24 @@ ui <- page_fluid(
         border-radius: 12px;
         padding: 20px;
         margin: 20px 0;
-        border: 1px solid #5A9B7C;
+        border: 1px solid #4C6D9A;
       }
       
       .stats-main {
         background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+      }
+      
+      .dataTables_wrapper {
+        font-size: 0.85rem !important;
+      }
+
+      .dataTables_wrapper table {
+        font-size: 0.8rem !important;
+      }
+
+      .dataTables_wrapper .dataTables_info,
+      .dataTables_wrapper .dataTables_paginate {
+        font-size: 0.75rem !important;
       }
       
     "))
@@ -139,24 +152,23 @@ ui <- page_fluid(
   # Main title with gradient background
   div(class = "main-title",
       h1("Wetland Hydrograph Visualizer", 
-         style = "margin: 0; font-size: 2.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3)")
+         style = "margin: 0; font-size: 2rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3)")
   ),
   
-  # First section: Hydrograph with improved styling
+  # First section: Hydrographs 
   div(class = "content-section",
-      h2("Wetland Hydrograph Analysis", class = "section-title"),
       layout_sidebar(
         sidebar = sidebar(
           class = "sidebar-custom",
           width = 300,
-          h4("Chart Controls", style = "color: #2C5F41; margin-bottom: 20px;"),
+          h4("Hydrograph Controls", style = "color: #1B365D; margin-bottom: 20px;"),
           
           selectInput("gm_site", 
                       label = div(icon("map-marker"), "Select a Great Meadow Site:"),
                       choices = sort(unique(all_data$site[grepl("Great Meadow", all_data$site)])),
                       selected = "Great Meadow 1"),
           
-          br(),
+          div(style = "margin-bottom: 15px;",
           pickerInput("year", 
                       label = div(icon("calendar"), "Select Year(s):"),
                       choices = sort(unique(all_data$Year)),
@@ -169,12 +181,17 @@ ui <- page_fluid(
                         `none-selected-text` = "Choose year(s)",
                         `live-search` = TRUE,
                         style = "btn-outline-primary"
-                      )),
+                      ))),
           
           br(),
           div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
-              p(icon("info-circle"), " Use the brush tool to select data points on the chart for detailed analysis.", 
-                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;"))
+              p(icon("info-circle"), " Use the brush tool to select data points on the hydrograph for a detailed view of the data.", 
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
+          
+          div(style = "margin-top: 15px; text-align: center;",
+              downloadButton("download_brush", "Download Selected Data", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("download")))
         ),
         
         card(
@@ -184,7 +201,7 @@ ui <- page_fluid(
             "Hydrographs by Year"
           ),
           plotOutput("hydrograph", height = "600px", 
-                     brush = brushOpts(id = "hydro_brush", fill = "#5A9B7C", opacity = 0.3))
+                     brush = brushOpts(id = "hydro_brush", fill = "#4C6D9A", opacity = 0.3))
         )
       )
   ),
@@ -193,12 +210,10 @@ ui <- page_fluid(
   div(class = "brush-info-section",
       div(class = "row",
           div(class = "col-12",
-              h3("Selected Data Points:", 
-                 style = "color: #2C5F41; text-align: center; margin-bottom: 20px;"),
               card(
                 card_header(
-                  class = "bg-info text-white",
-                  "Detailed View of Brushed Data"
+                  class = "bg-success text-white",
+                  "Selected Data from Hydrograph:"
                 ),
                 tableOutput("brush_info")
               )
@@ -208,12 +223,11 @@ ui <- page_fluid(
   
   # Second section: Water Level Stats with improved styling
   div(class = "content-section stats-main",
-      h2("Water Level Statistics", class = "section-title"),
       layout_sidebar(
         sidebar = sidebar(
           class = "sidebar-custom",
           width = 300,
-          h4("Statistics Controls", style = "color: #2C5F41; margin-bottom: 20px;"),
+          h4("Statistics Controls", style = "color: #1B365D; margin-bottom: 20px;"),
           
           pickerInput("stats_site", 
                       label = div(icon("map-marker"), "Select Site(s):"),
@@ -229,12 +243,11 @@ ui <- page_fluid(
                         style = "btn-outline-primary"
                       )),
           
-          br(),
-          
+          div(style = "margin-bottom: 15px;",
           pickerInput("stats_year", 
                       label = div(icon("calendar"), "Select Years:"),
                       choices = sort(unique(wl_stats$year)),
-                      selected = c(2022, 2023),
+                      selected = c(2023, 2022),
                       multiple = TRUE,
                       options = list(
                         `actions-box` = TRUE,
@@ -243,12 +256,17 @@ ui <- page_fluid(
                         `none-selected-text` = "Choose year(s)",
                         `live-search` = TRUE,
                         style = "btn-outline-primary"
-                      )),
+                      ))),
           
           br(),
           div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
               p(icon("info-circle"), " Growing Season statistics calculated from May through October.", 
-                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;"))
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
+          
+          div(style = "margin-top: 15px; text-align: center;",
+              downloadButton("download_stats", "Download Table", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("download")))
         ),
         
         card(
@@ -422,6 +440,34 @@ server <- function(input, output, session) {
         `GS % Complete Data` = prop_GS_comp
       )
   }, options = list(pageLength = 10, scrollX = TRUE))
+  
+  # Download handler for brushed data
+  output$download_brush <- downloadHandler(
+    filename = function() {
+      paste("hydrograph_selected_data_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      # Get the brushed data (you'll need this reactive from your existing brush logic)
+      brushed_data <- brushedPoints(plot_data(), input$hydro_brush,
+                                    xvar = "doy_h", yvar = "water.depth")
+      write.csv(brushed_data, file, row.names = FALSE)
+    }
+  )
+  
+  # Download handler for water level stats
+  output$download_stats <- downloadHandler(
+    filename = function() {
+      paste("water_level_stats_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      # Use your filtered stats data
+      filtered_stats <- wl_stats %>%
+        filter(site %in% input$stats_site,
+               year %in% input$stats_year)
+      write.csv(filtered_stats, file, row.names = FALSE)
+    }
+  )
+  
 }
 
 # Run app
