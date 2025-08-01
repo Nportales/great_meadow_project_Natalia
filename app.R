@@ -51,7 +51,16 @@ gl <- read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.cs
          site)
 
 all_data <- bind_rows(gm, gl) %>% 
-  filter(Year >= 2016 & Year <= 2023) 
+  filter(Year >= 2016 & Year <= 2023) %>% 
+  select(timestamp, 
+         date = Date, 
+         year = Year, 
+         doy, 
+         hr, 
+         doy_h, 
+         lag_precip = lag.precip,
+         water_depth = water.depth,
+         site)
 
 wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>% 
   select(year,
@@ -171,7 +180,7 @@ ui <- page_fluid(
           div(style = "margin-bottom: 15px;",
           pickerInput("year", 
                       label = div(icon("calendar"), "Select Year(s):"),
-                      choices = sort(unique(all_data$Year)),
+                      choices = sort(unique(all_data$year)),
                       selected = 2023,
                       multiple = TRUE,
                       options = list(
@@ -290,7 +299,7 @@ server <- function(input, output, session) {
     req(input$year, input$gm_site)
     
     all_data %>%
-      filter(Year %in% input$year, doy > 134, doy < 275) %>%
+      filter(year %in% input$year, doy > 134, doy < 275) %>%
       filter(site %in% c(input$gm_site, "Gilmore Meadow"))
   })
   
@@ -300,27 +309,27 @@ server <- function(input, output, session) {
     
     # Calculate precipitation offset for each year
     precip_data <- plot_data_filtered %>%
-      group_by(Year) %>%
+      group_by(year) %>%
       summarise(
         min_water = min(c(
-          water.depth[site == input$gm_site & !is.na(water.depth)],
-          water.depth[site == "Gilmore Meadow" & !is.na(water.depth)]
+          water_depth[site == input$gm_site & !is.na(water_depth)],
+          water_depth[site == "Gilmore Meadow" & !is.na(water_depth)]
         ), na.rm = TRUE),
         .groups = 'drop'
       ) %>%
-      left_join(plot_data_filtered, by = "Year") %>%
-      mutate(precip_y = lag.precip * 5 + min_water)
+      left_join(plot_data_filtered, by = "year") %>%
+      mutate(precip_y = lag_precip * 5 + min_water)
     
-    global_min_water <- min(plot_data_filtered$water.depth, na.rm = TRUE)
+    global_min_water <- min(plot_data_filtered$water_depth, na.rm = TRUE)
     
     # Create the plot using facet_wrap instead of patchwork
     ggplot() +
       # Water level lines
       geom_line(data = plot_data_filtered %>% filter(site == input$gm_site),
-                aes(x = doy_h, y = water.depth, color = input$gm_site), 
+                aes(x = doy_h, y = water_depth, color = input$gm_site), 
                 size = 0.7) +
       geom_line(data = plot_data_filtered %>% filter(site == "Gilmore Meadow"),
-                aes(x = doy_h, y = water.depth, color = "Gilmore Meadow"), 
+                aes(x = doy_h, y = water_depth, color = "Gilmore Meadow"), 
                 size = 0.7) +
       # Precipitation line
       geom_line(data = precip_data,
@@ -329,7 +338,7 @@ server <- function(input, output, session) {
       geom_hline(yintercept = 0, color = "brown") +
       
       # Facet by year
-      facet_wrap(~ Year, ncol = 1, scales = "free_y") +
+      facet_wrap(~ year, ncol = 1, scales = "free_y") +
       
       # Styling
       scale_color_manual(values = c(
@@ -366,15 +375,15 @@ server <- function(input, output, session) {
       plot_data_filtered,
       brush = input$hydro_brush,
       xvar = "doy_h",
-      yvar = "water.depth"
+      yvar = "water_depth"
     ) %>%
-      select(site, Year, doy_h, timestamp, water.depth, precip_cm) %>%
-      arrange(Year, doy_h) %>%
+      select(site, year, doy_h, timestamp, water_depth, lag_precip) %>%
+      arrange(year, doy_h) %>%
       # Round for better display
       mutate(
         doy_h = round(doy_h, 2),
-        water.depth = round(water.depth, 2),
-        precip_cm = round(precip_cm, 3),
+        water_depth = round(water_depth, 2),
+        lag_precip = round(lag_precip, 3),
         timestamp = format(timestamp, "%Y-%m-%d %H:%M:%S")
       )
     
@@ -387,25 +396,26 @@ server <- function(input, output, session) {
         # Round doy_h slightly to group nearby times together
         mutate(doy_h_rounded = round(doy_h, 1)) %>%
         # Group by the rounded time
-        group_by(Year, doy_h_rounded) %>%
+        group_by(year, doy_h_rounded) %>%
         summarise(
           # Use the first timestamp and precipitation value in each group
           timestamp = first(timestamp),
           doy_h = first(doy_h),
-          precip_cm = first(precip_cm),
+          lag_precip = first(lag_precip),
           # Create separate columns for each site's water depth
           great_meadow_depth = ifelse(any(site == input$gm_site), 
-                                      water.depth[site == input$gm_site][1], NA),
+                                      water_depth[site == input$gm_site][1], NA),
           gilmore_depth = ifelse(any(site == "Gilmore Meadow"), 
-                                 water.depth[site == "Gilmore Meadow"][1], NA),
+                                 water_depth[site == "Gilmore Meadow"][1], NA),
           .groups = 'drop'
         ) %>%
         # Remove the grouping column and rename for display
         select(-doy_h_rounded) %>%
         rename(
+          `Year` = year, 
           `Timestamp` = timestamp,
           `Day of Year` = doy_h,
-          `Precipitation (cm)` = precip_cm
+          `Precipitation (cm)` = lag_precip
         ) %>%
         # Create dynamic column names based on selected site
         rename_with(~ paste(input$gm_site, "Water Depth (cm)"), .cols = great_meadow_depth) %>%
@@ -449,7 +459,7 @@ server <- function(input, output, session) {
     content = function(file) {
       # Get the brushed data (you'll need this reactive from your existing brush logic)
       brushed_data <- brushedPoints(plot_data(), input$hydro_brush,
-                                    xvar = "doy_h", yvar = "water.depth")
+                                    xvar = "doy_h", yvar = "water_depth")
       write.csv(brushed_data, file, row.names = FALSE)
     }
   )
@@ -472,6 +482,5 @@ server <- function(input, output, session) {
 
 # Run app
 shinyApp(ui, server)
-
 
 
