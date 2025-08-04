@@ -171,14 +171,24 @@ print(p_plot)
 
 # graph invasive species by year -----------------------------------------------
 
+# number of unique species by year and wetland
 summary_table <- species_list %>%
-  filter(invasive == "TRUE", ) %>%
-  group_by(year) %>%
+  filter(invasive == "TRUE") %>%
+  group_by(year, wetland) %>%
   summarise(
     count = n_distinct(latin.name),
     invasive_species = paste(unique(latin.name), collapse = ", ")
   )
 
+# total number of invasive species by year and wetland
+invasives <- species_list %>%
+  filter(invasive == TRUE) %>%
+  group_by(year, wetland) %>%
+  summarise(
+    count = n(),
+    invasive_species = paste(unique(latin.name), collapse = ", "),
+    .groups = "drop"
+  )
 
 # ggplot(summary_table, aes(x = factor(year), y = count)) +
 #   geom_bar(stat = "identity", fill = "tomato") +

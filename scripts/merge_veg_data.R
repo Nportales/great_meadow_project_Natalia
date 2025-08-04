@@ -205,6 +205,22 @@ qa_vmmi <- qa_check_coords(VMMI_FOA_NETN, monitoring_sites)
 # Save outputs as CSV
 # write.csv(vmmi_corrected, "data/processed_data/FOA_NETN_VMMI_2011_2024.csv", row.names = FALSE)
 
+  
+# summarize VMMI by wetland
+summary_vmmi_wetland <- vmmi_corrected %>%
+  group_by(wetland) %>%
+  summarise(
+    mean.vmmi = mean(vmmi, na.rm = TRUE),
+    mean.c = mean(mean.coc, na.rm = TRUE),
+    mean.inv.cov = mean(inv.cov, na.rm = TRUE),
+    mean.bryo.cov = mean(bryo.cov, na.rm = TRUE),
+    mean.strol.cov = mean(strtol.cov, na.rm = TRUE),
+    good.sites = n_distinct(site.name[vmmi.rating == "Good"]),
+    fair.sites = n_distinct(site.name[vmmi.rating == "Fair"]),
+    poor.sites = n_distinct(site.name[vmmi.rating == "Poor"]),
+    .groups = "drop"
+    )
+  
 
 ## merge FOA spplist data with NETN spplist data ------------------------------------
 
