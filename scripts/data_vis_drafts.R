@@ -200,4 +200,36 @@ invasives <- species_list %>%
 #   theme_minimal()
 
 
+# Hydrograph and growing season summary stats - comparison between Great Meadow and Gilmore Meadow
+
+wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>% 
+  select(year,
+         stat, 
+         `Gilmore Meadow` = gilmore.meadow, 
+         `Great Meadow 1` = great.meadow.1, 
+         `Great Meadow 2` = great.meadow.2, 
+         `Great Meadow 3` = great.meadow.3, 
+         `Great Meadow 4` = great.meadow.4, 
+         `Great Meadow 5` = great.meadow.5, 
+         `Great Meadow 6` = great.meadow.6) %>% 
+  pivot_longer(cols = -c(year, stat), names_to = "site", values_to = "value") %>% 
+  pivot_wider(names_from = stat, values_from = value) %>%
+  arrange(site, year)
+
+# group sites by wetland
+wl_grouped_stats <- wl_stats %>%
+  mutate(site_group = ifelse(grepl("Great Meadow", site), "Great Meadow", site))
+
+# Calculate mean of stats by wetland
+wl_stats_summary <- wl_grouped_stats %>%
+  group_by(site_group) %>%
+  summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE))) %>%
+  ungroup()
+
+# calculate mean of stats by individual site
+wl_stats_sites_summary <- wl_stats %>%
+  group_by(site) %>%
+  summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE))) %>%
+  ungroup()
+
 
