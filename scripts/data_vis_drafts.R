@@ -233,3 +233,41 @@ wl_stats_sites_summary <- wl_stats %>%
   ungroup()
 
 
+# run significance tests for comparing stats between great meadow and gilmore meadow
+
+# Get all numeric stat columns
+stat_cols <- wl_grouped_stats %>% select(where(is.numeric)) %>% names()
+
+# Run t-tests for each variable and store p-values
+t_test_results <- lapply(stat_cols, function(var) {
+  formula <- as.formula(paste(var, "~ site_group"))
+  test <- t.test(formula, data = wl_grouped_stats)
+  data.frame(
+    variable = var,
+    p_value = test$p.value,
+    mean_Great_Meadow = mean(wl_grouped_stats[[var]][wl_grouped_stats$site_group == "Great Meadow"], na.rm = TRUE),
+    mean_Gilmore_Meadow = mean(wl_grouped_stats[[var]][wl_grouped_stats$site_group == "Gilmore Meadow"], na.rm = TRUE)
+  )
+})
+
+# Combine results into a single data frame
+t_test_df <- bind_rows(t_test_results)
+
+# View
+print(t_test_df)
+
+
+# visualize through box-plots
+ggplot(wl_grouped_stats, aes(x = site_group, y = WL_mean)) +
+  geom_boxplot() +
+  labs(y = "Mean Water Level (cm)", x = "Wetland Group") +
+  theme_minimal()
+
+ggplot(wl_grouped_stats, aes(x = site_group, y = WL_sd)) +
+  geom_boxplot() +
+  labs(y = "Mean Standard Deviation (cm)", x = "Wetland Group") +
+  theme_minimal()
+
+
+
+
