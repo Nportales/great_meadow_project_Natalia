@@ -74,7 +74,14 @@ wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>%
          `Great Meadow 6` = great.meadow.6) %>% 
   pivot_longer(cols = -c(year, stat), names_to = "site", values_to = "value") %>% 
   pivot_wider(names_from = stat, values_from = value) %>%
-  arrange(site, year)
+  arrange(site, year) %>% 
+  mutate(
+    wetland = case_when(
+      grepl("Great Meadow", site, ignore.case = TRUE) ~ "Great Meadow",
+      grepl("Gilmore Meadow", site, ignore.case = TRUE) ~ "Gilmore Meadow",
+      TRUE ~ "Unknown"
+    )
+  )
 
 
 # UI 
@@ -267,6 +274,12 @@ ui <- page_fluid(
                         style = "btn-outline-primary"
                       ))),
           
+          div(style = "margin-bottom: 15px;",
+              radioButtons("time_summary", "Summarize Stats:",
+                           choices = c("Each Year" = "year", "Average Across Years" = "multi"),
+                           selected = "year",
+                           inline = TRUE)),
+          
           br(),
           div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
               p(icon("info-circle"), " Growing Season statistics calculated from May through October.", 
@@ -427,29 +440,93 @@ server <- function(input, output, session) {
     }
   })
   
-  # WL stats output table
-  output$wl_stats <- DT::renderDataTable({
-    req(input$stats_site, input$stats_year)
+  # setting up average WL stats and calculating stats output tables
+  filtered_stats <- reactive({
+    req(input$stats_site, input$stats_year, input$time_summary)
     
-    wl_stats %>%
-      filter(site %in% input$stats_site, year %in% input$stats_year) %>% 
-      mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
-      select(
-        Year = year,
-        Site = site,
-        `Mean Water Level` = WL_mean,
-        `SD Water Level` = WL_sd,
-        `Minimum Water Level` = WL_min,
-        `Maximum Water Level` = WL_max,
-        `Maximum Hourly Increase` = max_inc,
-        `Maximum Hourly Decrease` = max_dec,
-        `Growing Season Change` = GS_change,
-        `GS % Surface Water` = prop_over_0cm,
-        `GS % Within 30cm` = prop_bet_0_neg30cm,
-        `GS % Over 30cm Deep` = prop_under_neg30cm,
-        `GS % Complete Data` = prop_GS_comp
+    data <- wl_stats %>%
+      filter(site %in% input$stats_site, year %in% input$stats_year)
+    
+    if (input$time_summary == "year") {
+      # ---- Option 1: Per-Year Summary ----
+      data %>%
+        mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
+        select(
+          Year = year,
+          Site = site,
+          `Mean Water Level` = WL_mean,
+          `SD Water Level` = WL_sd,
+          `Minimum Water Level` = WL_min,
+          `Maximum Water Level` = WL_max,
+          `Maximum Hourly Increase` = max_inc,
+          `Maximum Hourly Decrease` = max_dec,
+          `Growing Season Change` = GS_change,
+          `GS % Surface Water` = prop_over_0cm,
+          `GS % Within 30cm` = prop_bet_0_neg30cm,
+          `GS % Over 30cm Deep` = prop_under_neg30cm,
+          `GS % Complete Data` = prop_GS_comp
+        )
+    } else {
+      # ---- Option 2: Average Across Years ----
+      # Per-site summary
+      data_site <- data %>%
+        group_by(site, wetland) %>%
+        summarise(
+          Year = paste0(min(year), "–", max(year)),
+          `Mean Water Level` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change` = round(mean(GS_change, na.rm = TRUE), 2),
+          `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
+          `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
+          `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
+          `GS % Complete Data` = round(mean(prop_GS_comp, na.rm = TRUE), 2),
+          .groups = "drop"
+        )
+      
+      # Per-wetland "All Sites" summary
+      data_wetland <- data %>%
+        group_by(wetland) %>%
+        summarise(
+          site = "All Sites",
+          Year = paste0(min(year), "–", max(year)),
+          `Mean Water Level` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change` = round(mean(GS_change, na.rm = TRUE), 2),
+          `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
+          `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
+          `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
+          `GS % Complete Data` = round(mean(prop_GS_comp, na.rm = TRUE), 2),
+          .groups = "drop"
+        )
+      
+      bind_rows(data_site, data_wetland) %>%
+        distinct() %>% 
+        rename(Site = site,
+               Wetland = wetland)
+    }
+  })
+  
+  # WL stats table output
+  output$wl_stats <- DT::renderDataTable({
+    datatable(
+      filtered_stats(),
+      options = list(pageLength = 10, scrollX = TRUE)
+    ) %>%
+      formatStyle(
+        'Site',
+        target = 'cell',
+        fontWeight = styleEqual("All Sites", "bold")
       )
-  }, options = list(pageLength = 10, scrollX = TRUE))
+  })
+  
   
   # Download handler for brushed data
   output$download_brush <- downloadHandler(
@@ -467,14 +544,14 @@ server <- function(input, output, session) {
   # Download handler for water level stats
   output$download_stats <- downloadHandler(
     filename = function() {
-      paste("water_level_stats_", Sys.Date(), ".csv", sep = "")
+      if (input$summary_level == "wetland") {
+        paste("wetland_averaged_stats_", Sys.Date(), ".csv", sep = "")
+      } else {
+        paste("site_stats_", Sys.Date(), ".csv", sep = "")
+      }
     },
     content = function(file) {
-      # Use your filtered stats data
-      filtered_stats <- wl_stats %>%
-        filter(site %in% input$stats_site,
-               year %in% input$stats_year)
-      write.csv(filtered_stats, file, row.names = FALSE)
+      write.csv(filtered_stats(), file, row.names = FALSE)
     }
   )
   
