@@ -220,7 +220,15 @@ summary_vmmi_wetland <- vmmi_corrected %>%
     poor.sites = n_distinct(site.name[vmmi.rating == "Poor"]),
     .groups = "drop"
     )
-  
+
+# significance tests 
+# Two-sample t-test comparing VMMI between the two wetlands
+t_test_vmmi <- t.test(vmmi ~ wetland,
+                      data = vmmi_corrected %>%
+                        filter(wetland %in% c("Great Meadow", "Gilmore Meadow")))
+
+t_test_vmmi
+
 
 ## merge FOA spplist data with NETN spplist data ------------------------------------
 
