@@ -57,7 +57,8 @@ all_data <- bind_rows(gm, gl) %>%
          year = Year, 
          doy, 
          hr, 
-         doy_h, 
+         doy_h,
+         precip_cm,
          lag_precip = lag.precip,
          water_depth = water.depth,
          site)
@@ -263,7 +264,7 @@ ui <- page_fluid(
           pickerInput("stats_year", 
                       label = div(icon("calendar"), "Select Years:"),
                       choices = sort(unique(wl_stats$year)),
-                      selected = c(2023, 2022),
+                      selected = c(2023, 2022, 2021, 2020),
                       multiple = TRUE,
                       options = list(
                         `actions-box` = TRUE,
@@ -320,70 +321,70 @@ server <- function(input, output, session) {
     plot_data_filtered <- plot_data()
     req(nrow(plot_data_filtered) > 0)
     
-    # Calculate precipitation offset for each year
-    precip_data <- plot_data_filtered %>%
-      group_by(year) %>%
-      summarise(
-        min_water = min(c(
-          water_depth[site == input$gm_site & !is.na(water_depth)],
-          water_depth[site == "Gilmore Meadow" & !is.na(water_depth)]
-        ), na.rm = TRUE),
-        .groups = 'drop'
-      ) %>%
-      left_join(plot_data_filtered, by = "year") %>%
-      mutate(precip_y = lag_precip * 5 + min_water)
+    # Calculate minimum water level across all data for consistent precipitation baseline
+    minWL <- min(plot_data_filtered$water_depth, na.rm = TRUE)
     
-    global_min_water <- min(plot_data_filtered$water_depth, na.rm = TRUE)
-    
-    # Create the plot using facet_wrap instead of patchwork
-    ggplot() +
-      # Water level lines
+    # Create the plot using your simplified approach
+    ggplot(plot_data_filtered, aes(x = doy_h, y = water_depth)) +
+      # Water level lines by site
       geom_line(data = plot_data_filtered %>% filter(site == input$gm_site),
-                aes(x = doy_h, y = water_depth, color = input$gm_site), 
-                size = 0.7) +
+                aes(color = input$gm_site), size = 0.7) +
       geom_line(data = plot_data_filtered %>% filter(site == "Gilmore Meadow"),
-                aes(x = doy_h, y = water_depth, color = "Gilmore Meadow"), 
+                aes(color = "Gilmore Meadow"), size = 0.7) +
+      
+      # Precipitation line (scaled by multiplier of 5 and offset by minWL)
+      geom_line(aes(x = doy_h, y = lag_precip * 5 + minWL, color = "Precipitation"), 
                 size = 0.7) +
-      # Precipitation line
-      geom_line(data = precip_data,
-                aes(x = doy_h, y = precip_y, color = "Precipitation"), size = 0.7) +
+      
       # Ground level reference
-      geom_hline(yintercept = 0, color = "brown") +
+      geom_hline(yintercept = 0, color = 'brown') +
       
       # Facet by year
       facet_wrap(~ year, ncol = 1, scales = "free_y") +
       
-      # Styling
+      # Colors
       scale_color_manual(values = c(
         setNames("black", input$gm_site),
         "Gilmore Meadow" = "darkgray",
         "Precipitation" = "blue"
       )) +
-      labs(title = NULL,
-           x = "Date", y = "Water Level (cm)") +
+      
+      # Axes and labels
+      labs(y = 'Water Level (cm)', x = 'Date') +
       scale_x_continuous(
         breaks = c(121, 152, 182, 213, 244, 274),
-        labels = c('May-01', 'Jun-01', 'Jul-01', 'Aug-01', 'Sep-01', 'Oct-01')) +
+        labels = c('May-01', 'Jun-01', 'Jul-01', 'Aug-01', 'Sep-01', 'Oct-01')
+      ) +
+      
+      # Secondary axis for precipitation
       scale_y_continuous(
-        name = "Water Level (cm)",
-        sec.axis = sec_axis(~ (. - global_min_water) / 5,
-                            name = "Hourly Precip. (cm)",
-                            breaks = seq(0, 8, by = 2))) +
+        sec.axis = sec_axis(~ .,
+                            breaks = c(minWL, minWL + 10),
+                            name = 'Hourly Precip. (cm)',
+                            labels = c('0', '2'))
+      ) +
+      
+      # Theme
       theme_bw() +
-      theme(legend.position = "bottom",
-            legend.title = element_blank(),
-            strip.text = element_text(size = 11),
-            plot.title = element_text(hjust = 0.5))
+      theme(
+        plot.title = element_text(hjust = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text.y.right = element_text(color = 'blue'),
+        axis.title.y.right = element_text(color = 'blue'),
+        strip.text = element_text(size = 11),
+        legend.position = "bottom",
+        legend.title = element_blank()
+      )
   })
   
-  # Selected data output table - Now with separate columns for each site
-  output$brush_info <- renderTable({
+  # Reactive for processed brushed data
+  processed_brush_data <- reactive({
     req(input$hydro_brush)
     
     plot_data_filtered <- plot_data()
     req(nrow(plot_data_filtered) > 0)
     
-    # Use brushedPoints function which works properly with faceted plots
     selected_data <- brushedPoints(
       plot_data_filtered,
       brush = input$hydro_brush,
@@ -392,7 +393,6 @@ server <- function(input, output, session) {
     ) %>%
       select(site, year, doy_h, timestamp, water_depth, lag_precip) %>%
       arrange(year, doy_h) %>%
-      # Round for better display
       mutate(
         doy_h = round(doy_h, 2),
         water_depth = round(water_depth, 2),
@@ -400,45 +400,35 @@ server <- function(input, output, session) {
         timestamp = format(timestamp, "%Y-%m-%d %H:%M:%S")
       )
     
-    if(nrow(selected_data) == 0) {
-      data.frame(Message = "No points selected - try brushing over the water level lines")
-    } else {
-      # Create a proper time grouping to match data points from both sites
-      # Group by rounded doy_h to combine data from both sites at similar times
-      pivoted_data <- selected_data %>%
-        # Round doy_h slightly to group nearby times together
-        mutate(doy_h_rounded = round(doy_h, 1)) %>%
-        # Group by the rounded time
-        group_by(year, doy_h_rounded) %>%
-        summarise(
-          # Use the first timestamp and precipitation value in each group
-          timestamp = first(timestamp),
-          doy_h = first(doy_h),
-          lag_precip = first(lag_precip),
-          # Create separate columns for each site's water depth
-          great_meadow_depth = ifelse(any(site == input$gm_site), 
-                                      water_depth[site == input$gm_site][1], NA),
-          gilmore_depth = ifelse(any(site == "Gilmore Meadow"), 
-                                 water_depth[site == "Gilmore Meadow"][1], NA),
-          .groups = 'drop'
-        ) %>%
-        # Remove the grouping column and rename for display
-        select(-doy_h_rounded) %>%
-        rename(
-          `Year` = year, 
-          `Timestamp` = timestamp,
-          `Day of Year` = doy_h,
-          `Precipitation (cm)` = lag_precip
-        ) %>%
-        # Create dynamic column names based on selected site
-        rename_with(~ paste(input$gm_site, "Water Depth (cm)"), .cols = great_meadow_depth) %>%
-        rename_with(~ "Gilmore Meadow Water Depth (cm)", .cols = gilmore_depth) %>%
-        # Arrange by year and day
-        arrange(Year, `Day of Year`)
-      
-      pivoted_data
+    if (nrow(selected_data) == 0) {
+      return(data.frame(Message = "No points selected - try brushing over the water level lines"))
     }
+    
+    selected_data %>%
+      mutate(doy_h_rounded = round(doy_h, 1)) %>%
+      group_by(year, doy_h_rounded) %>%
+      summarise(
+        timestamp = first(timestamp),
+        doy_h = first(doy_h),
+        lag_precip = first(lag_precip),
+        great_meadow_depth = ifelse(any(site == input$gm_site), 
+                                    water_depth[site == input$gm_site][1], NA),
+        gilmore_depth = ifelse(any(site == "Gilmore Meadow"), 
+                               water_depth[site == "Gilmore Meadow"][1], NA),
+        .groups = 'drop'
+      ) %>%
+      select(-doy_h_rounded) %>%
+      rename(
+        `Year` = year, 
+        `Timestamp` = timestamp,
+        `Day of Year` = doy_h,
+        `Precipitation (cm)` = lag_precip
+      ) %>%
+      rename_with(~ paste(input$gm_site, "Water Depth (cm)"), .cols = great_meadow_depth) %>%
+      rename_with(~ "Gilmore Meadow Water Depth (cm)", .cols = gilmore_depth) %>%
+      arrange(Year, `Day of Year`)
   })
+  
   
   # setting up average WL stats and calculating stats output tables
   filtered_stats <- reactive({
@@ -454,17 +444,16 @@ server <- function(input, output, session) {
         select(
           Year = year,
           Site = site,
-          `Mean Water Level` = WL_mean,
-          `SD Water Level` = WL_sd,
-          `Minimum Water Level` = WL_min,
-          `Maximum Water Level` = WL_max,
-          `Maximum Hourly Increase` = max_inc,
-          `Maximum Hourly Decrease` = max_dec,
-          `Growing Season Change` = GS_change,
+          `Mean Water Level (cm)` = WL_mean,
+          `SD Water Level (cm)` = WL_sd,
+          `Minimum Water Level (cm)` = WL_min,
+          `Maximum Water Level (cm)` = WL_max,
+          `Maximum Hourly Increase (cm)` = max_inc,
+          `Maximum Hourly Decrease (cm)` = max_dec,
+          `Growing Season Change (cm)` = GS_change,
           `GS % Surface Water` = prop_over_0cm,
           `GS % Within 30cm` = prop_bet_0_neg30cm,
-          `GS % Over 30cm Deep` = prop_under_neg30cm,
-          `GS % Complete Data` = prop_GS_comp
+          `GS % Over 30cm Deep` = prop_under_neg30cm
         )
     } else {
       # ---- Option 2: Average Across Years ----
@@ -473,17 +462,16 @@ server <- function(input, output, session) {
         group_by(site, wetland) %>%
         summarise(
           Year = paste0(min(year), "–", max(year)),
-          `Mean Water Level` = round(mean(WL_mean, na.rm = TRUE), 2),
-          `SD Water Level` = round(mean(WL_sd, na.rm = TRUE), 2),
-          `Minimum Water Level` = round(mean(WL_min, na.rm = TRUE), 2),
-          `Maximum Water Level` = round(mean(WL_max, na.rm = TRUE), 2),
-          `Maximum Hourly Increase` = round(mean(max_inc, na.rm = TRUE), 2),
-          `Maximum Hourly Decrease` = round(mean(max_dec, na.rm = TRUE), 2),
-          `Growing Season Change` = round(mean(GS_change, na.rm = TRUE), 2),
+          `Mean Water Level (cm)` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level (cm)` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level (cm)` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level (cm)` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase (cm)` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease (cm)` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change (cm)` = round(mean(GS_change, na.rm = TRUE), 2),
           `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
           `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
           `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
-          `GS % Complete Data` = round(mean(prop_GS_comp, na.rm = TRUE), 2),
           .groups = "drop"
         )
       
@@ -493,17 +481,16 @@ server <- function(input, output, session) {
         summarise(
           site = "All Sites",
           Year = paste0(min(year), "–", max(year)),
-          `Mean Water Level` = round(mean(WL_mean, na.rm = TRUE), 2),
-          `SD Water Level` = round(mean(WL_sd, na.rm = TRUE), 2),
-          `Minimum Water Level` = round(mean(WL_min, na.rm = TRUE), 2),
-          `Maximum Water Level` = round(mean(WL_max, na.rm = TRUE), 2),
-          `Maximum Hourly Increase` = round(mean(max_inc, na.rm = TRUE), 2),
-          `Maximum Hourly Decrease` = round(mean(max_dec, na.rm = TRUE), 2),
-          `Growing Season Change` = round(mean(GS_change, na.rm = TRUE), 2),
+          `Mean Water Level (cm)` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level (cm)` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level (cm)` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level (cm)` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase (cm)` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease (cm)` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change (cm)` = round(mean(GS_change, na.rm = TRUE), 2),
           `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
           `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
           `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
-          `GS % Complete Data` = round(mean(prop_GS_comp, na.rm = TRUE), 2),
           .groups = "drop"
         )
       
@@ -514,7 +501,12 @@ server <- function(input, output, session) {
     }
   })
   
-  # WL stats table output
+  # reactive table output for selected data from hydrograph
+  output$brush_info <- renderTable({
+    processed_brush_data()
+  })
+  
+  # reactive table output for WL stats 
   output$wl_stats <- DT::renderDataTable({
     datatable(
       filtered_stats(),
@@ -534,17 +526,14 @@ server <- function(input, output, session) {
       paste("hydrograph_selected_data_", Sys.Date(), ".csv", sep = "")
     },
     content = function(file) {
-      # Get the brushed data (you'll need this reactive from your existing brush logic)
-      brushed_data <- brushedPoints(plot_data(), input$hydro_brush,
-                                    xvar = "doy_h", yvar = "water_depth")
-      write.csv(brushed_data, file, row.names = FALSE)
+      write.csv(processed_brush_data(), file, row.names = FALSE)
     }
   )
   
   # Download handler for water level stats
   output$download_stats <- downloadHandler(
     filename = function() {
-      if (input$summary_level == "wetland") {
+      if (input$time_summary == "multi") {
         paste("wetland_averaged_stats_", Sys.Date(), ".csv", sep = "")
       } else {
         paste("site_stats_", Sys.Date(), ".csv", sep = "")
