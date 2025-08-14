@@ -222,8 +222,12 @@ summary_vmmi_wetland <- vmmi_corrected %>%
     )
 
 # significance tests 
-# Two-sample t-test comparing VMMI between the two wetlands
+# Welch two-sample t-test comparing VMMI between the two wetlands
 t_test_vmmi <- t.test(vmmi ~ wetland,
+                      data = vmmi_corrected %>%
+                        filter(wetland %in% c("Great Meadow", "Gilmore Meadow")))
+
+t_test_vmmi <- t.test(strtol.cov ~ wetland,
                       data = vmmi_corrected %>%
                         filter(wetland %in% c("Great Meadow", "Gilmore Meadow")))
 
