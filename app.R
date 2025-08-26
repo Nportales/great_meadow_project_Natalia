@@ -6,7 +6,7 @@ library(shinyWidgets)
 library(DT)
 library(bslib)
 
-# Read & prepare your processed data (from your current script)
+# Read & prepare processed data
 gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250715.csv") %>%
   rename(Date = date, Year = year, precip_cm = precip.cm) %>%
   mutate(Date = as.Date(Date),
