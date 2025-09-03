@@ -423,6 +423,23 @@ spplist_arcgis_2 <- spplist_corrected %>%
 # write.csv(spplist_arcgis_2, "data/processed_data/species_list_arcgis_latlong.csv", row.names = FALSE)
 
 
+#### merge vmmi data with monitoring sites data
+
+# get most recent vmmi rating for each site
+vmmi_recent <- vmmi_corrected %>%
+  group_by(site.name) %>%
+  filter(year == max(year)) %>%
+  ungroup() %>%
+  select(site.name, vmmi.rating)
+
+# join to sites dataset
+sites_vmmi <- monitoring_sites %>%
+  left_join(vmmi_recent, by = "site.name")
+
+# Save outputs as CSV
+# write.csv(sites_vmmi, "data/processed_data/monitoring_sites_vmmi.csv", row.names = FALSE)
+
+
 
 #### GRAVEYARD ####-------------------------------------------------------------
 
