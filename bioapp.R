@@ -33,16 +33,69 @@ merged_data <- full_join(
 #UI
 ui <- page_fluid(
   theme = bs_theme(
+    version = 5,
     bootswatch = "flatly",
     primary = "#2E8B57", 
-    base_font = font_google("Open Sans")
+    base_font = font_google("Open Sans"),
+    heading_font = font_google("Open Sans", wght = c(400, 700))
   ),
   
-  # Page Header
-  div(
-    class = "text-center mb-3",
-    h2("Biodiversity of Great Meadow", class = "display-4 text-primary"),
-    p("Summary of participatory science observations", class = "lead text-muted")
+  # Custom CSS for styled header
+  tags$head(
+    tags$style(HTML("
+      .main-title {
+        background: linear-gradient(135deg, #2E8B57 0%, #3CB371 100%);
+        color: white;
+        padding: 30px 30px 10px 30px;;
+        margin: -15px -15px 20px -15px;
+        text-align: center;
+        border-radius: 0 0 20px 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      .main-title h1 {
+        margin: 0;
+        font-size: 2rem;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+      }
+      .main-title p {
+        margin-top: 10px;
+        font-size: 1.1rem;
+        color: #e0f2e9;
+      }
+      
+    /* Keep all stat cards same height */
+    .card .card-body {
+      min-height: 100px;  
+      display: flex;
+      flex-direction: column;
+      justify-content: center; 
+      padding: 0.75rem;   
+    }
+    
+    /* Numbers a bit smaller */
+    .card h4 {
+      font-size: 1.2rem;
+      margin-bottom: 0.25rem;
+    }
+
+    /* Smaller labels */
+    .card .text-muted.small {
+      font-size: 0.75rem;
+    }
+
+    /* Smaller icons */
+    .card i {
+      font-size: 1.2rem !important;
+      margin-bottom: 6px;
+    }
+      
+    "))
+  ),
+  
+  # Main title styled like hydrology app
+  div(class = "main-title",
+      h1("Biodiversity of Great Meadow"),
+      p("Summary of participatory science observations")
   ),
   
   #### Side-by-side sections ####
@@ -51,31 +104,40 @@ ui <- page_fluid(
     
     #### iNaturalist Section ####
     div(class = "p-3 border border-light rounded",
-        h3("iNaturalist", class = "text-center text-success mb-3"),
+        h3("iNaturalist", class = "text-center text-primary mb-3"),
         
         # Stats with icons ABOVE the pie chart
-        div(class = "row g-2 mb-3",  # Added mb-3 for spacing below stats
+        div(class = "row g-2 mb-3",
+            
+            # Observations
             div(class = "col-6",
                 card(
                   class = "text-center",
                   card_body(
                     div(
-                      icon("binoculars", style = "font-size: 1.5rem; color: #28a745; margin-bottom: 8px;"),
-                      h4(textOutput("inat_observations"), class = "mb-1 text-primary"),
-                      div("Observations", class = "text-muted small")
+                      class = "d-flex align-items-center justify-content-center",
+                      icon("binoculars", style = "font-size: 1.2rem; color: #28a745; margin-right: 10px;"),
+                      div(
+                        h4(textOutput("inat_observations"), class = "mb-0 text-primary"),
+                        div("Observations", class = "text-muted small")
+                      )
                     )
                   )
                 )
             ),
+            
+            # Observers
             div(class = "col-6",
                 card(
-                  class = "text-center", 
+                  class = "text-center",
                   card_body(
                     div(
-                      icon("users", style = "font-size: 1.5rem; color: #17a2b8; margin-bottom: 8px;"),
-                      h4(textOutput("inat_people"), class = "mb-1 text-info"),
-                      div("Observers", class = "text-muted small")
-                    )
+                      class = "d-flex align-items-center justify-content-center",
+                      icon("users", style = "font-size: 1.2rem; color: #17a2b8; margin-right: 10px;"),
+                      div(
+                        h4(textOutput("inat_people"), class = "mb-0 text-info"),
+                        div("Observers", class = "text-muted small")
+                      )
                   )
                 )
             )
@@ -86,34 +148,45 @@ ui <- page_fluid(
             plotlyOutput("spp_plot", height = "350px"),
             div(id = "spp_legend", class = "mt-2")
         )
-    ),
+    )
+  ),
     
     #### eBird Section ####
     div(class = "p-3 border border-light rounded",
         h3("eBird", class = "text-center text-primary mb-3"),
         
         # Stats with icons ABOVE the pie chart
-        div(class = "row g-2 mb-3",  # Added mb-3 for spacing below stats
+        div(class = "row g-2 mb-3",
+            
+            # Checklists
             div(class = "col-6",
                 card(
                   class = "text-center",
                   card_body(
                     div(
-                      icon("clipboard-list", style = "font-size: 1.5rem; color: #28a745; margin-bottom: 8px;"),
-                      h4(textOutput("ebird_checklists"), class = "mb-1 text-primary"),
-                      div("Checklists", class = "text-muted small")
+                      class = "d-flex align-items-center justify-content-center",
+                      icon("clipboard-list", style = "font-size: 1.2rem; color: #28a745; margin-right: 10px;"),
+                      div(
+                        h4(textOutput("ebird_checklists"), class = "mb-0 text-primary"),
+                        div("Checklists", class = "text-muted small")
+                      )
                     )
                   )
                 )
             ),
+            
+            # Observers
             div(class = "col-6",
                 card(
-                  class = "text-center", 
+                  class = "text-center",
                   card_body(
                     div(
-                      icon("users", style = "font-size: 1.5rem; color: #17a2b8; margin-bottom: 8px;"),
-                      h4(textOutput("ebird_observers"), class = "mb-1 text-info"),
-                      div("Observers", class = "text-muted small")
+                      class = "d-flex align-items-center justify-content-center",
+                      icon("users", style = "font-size: 1.2rem; color: #17a2b8; margin-right: 10px;"),
+                      div(
+                        h4(textOutput("ebird_observers"), class = "mb-0 text-info"),
+                        div("Observers", class = "text-muted small")
+                      )
                     )
                   )
                 )
@@ -147,8 +220,8 @@ server <- function(input, output, session) {
       # Use multiple viridis family palettes - all colorblind friendly
       base_colors <- c(
         rev(viridis(8, option = "D", end = 0.85)),  # Classic viridis (purple-teal)
-        rev(viridis(6, option = "C", end = 0.9)),   # Plasma (purple-pink-orange)
-        rev(rocket(6))                             
+        rocket(6, begin = 0.4),
+        rev(cividis(6))
       )
       base_colors[1:min(n_colors, length(base_colors))]
     }
@@ -198,22 +271,23 @@ server <- function(input, output, session) {
             labels = ~iconic_taxon_name, 
             values = ~n,
             type = "pie", 
-            hole = 0.4,
+            hole = 0.6,
+            domain = list(x = c(0.1, 0.9), y = c(0.1, 0.9)),
             marker = list(colors = chart_colors,
                           line = list(color = "white", width = 2)),
             textinfo = "none",
             hovertemplate = "<b>%{label}</b><br>Species: %{value} (%{percent})<extra></extra>") %>%
       layout(
         showlegend = FALSE,
-        margin = list(t = 10, b = 10, l = 10, r = 10),
+        margin = list(t = 5, b = 5, l = 5, r = 5),
         paper_bgcolor = "transparent",  # Remove white background
         plot_bgcolor = "transparent", 
         annotations = list(
           list(x = 0.5, y = 0.5, 
                text = paste0("<b>", formatC(total_spp, big.mark = ","), "</b><br>",
-                             "<span style='font-size:12px'>Species</span>"),
+                             "<span style='font-size:14px'>Species</span>"),
                showarrow = FALSE,
-               font = list(size = 16))
+               font = list(size = 20))
         )
       ) %>%
       config(displayModeBar = FALSE)
@@ -260,22 +334,23 @@ server <- function(input, output, session) {
             labels = ~SPECIES_GROUP, 
             values = ~n,
             type = "pie", 
-            hole = 0.4,
+            hole = 0.6,
+            domain = list(x = c(0.1, 0.9), y = c(0.1, 0.9)),
             marker = list(colors = chart_colors,
                           line = list(color = "white", width = 2)),
             textinfo = "none",
             hovertemplate = "<b>%{label}</b><br>Species: %{value} (%{percent})<extra></extra>") %>%
       layout(
         showlegend = FALSE,
-        margin = list(t = 10, b = 10, l = 10, r = 10),
+        margin = list(t = 5, b = 5, l = 5, r = 5),
         paper_bgcolor = "transparent",  # Remove white background
         plot_bgcolor = "transparent", 
         annotations = list(
           list(x = 0.5, y = 0.5, 
                text = paste0("<b>", formatC(total_spp, big.mark = ","), "</b><br>",
-                             "<span style='font-size:12px'>Species</span>"),
+                             "<span style='font-size:14px'>Species</span>"),
                showarrow = FALSE,
-               font = list(size = 16))
+               font = list(size = 20))
         )
       ) %>%
       config(displayModeBar = FALSE)
