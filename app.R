@@ -140,7 +140,7 @@ ui <- page_fluid(
     warning = "#f39c12",
     danger = "#e74c3c",
     base_font = font_google("Open Sans"),
-    heading_font = font_google("Roboto", wght = c(400, 700))
+    heading_font = font_google("Open Sans", wght = c(400, 700))
   ),
   
   # Custom CSS for additional styling
