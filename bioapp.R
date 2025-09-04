@@ -33,11 +33,9 @@ merged_data <- full_join(
 #UI
 ui <- page_fluid(
   theme = bs_theme(
-    version = 5,
     bootswatch = "flatly",
     primary = "#2E8B57", 
-    base_font = font_google("Open Sans"),
-    heading_font = font_google("Open Sans", wght = c(400, 700))
+    base_font = font_google("Open Sans")
   ),
   
   # Custom CSS for styled header
@@ -63,139 +61,119 @@ ui <- page_fluid(
         color: #e0f2e9;
       }
       
-    /* Keep all stat cards same height */
-    .card .card-body {
-      min-height: 100px;  
-      display: flex;
-      flex-direction: column;
-      justify-content: center; 
-      padding: 0.75rem;   
-    }
-    
-    /* Numbers a bit smaller */
-    .card h4 {
-      font-size: 1.2rem;
-      margin-bottom: 0.25rem;
-    }
-
-    /* Smaller labels */
-    .card .text-muted.small {
-      font-size: 0.75rem;
-    }
-
-    /* Smaller icons */
-    .card i {
-      font-size: 1.2rem !important;
-      margin-bottom: 6px;
-    }
+      .card {
+      margin: 2px !important;   /* tighter margins */
+      }
       
-    "))
+      .card-body {
+      padding: 6px !important;  /* tighter padding inside */
+      }
+      
+      .card.dark-border {
+      border: 1px solid #bbb;   /* darker */
+      }
+      
+      "))
   ),
   
   # Main title styled like hydrology app
   div(class = "main-title",
       h1("Biodiversity of Great Meadow"),
-      p("Summary of participatory science observations")
+      p("Summary of Participatory Science Observations")
   ),
   
   #### Side-by-side sections ####
   layout_columns(
-    col_widths = c(6, 6),  # Equal width columns
+    col_widths = c(6, 6),  # equal width columns
     
     #### iNaturalist Section ####
-    div(class = "p-3 border border-light rounded",
-        h3("iNaturalist", class = "text-center text-primary mb-3"),
+    div(class = "p-3 border border-medium rounded",
+        h3("iNaturalist", class = "text-center mb-3", style = "color: #4a4a4a;"),
         
         # Stats with icons ABOVE the pie chart
-        div(class = "row g-2 mb-3",
-            
-            # Observations
-            div(class = "col-6",
-                card(
-                  class = "text-center",
-                  card_body(
-                    div(
-                      class = "d-flex align-items-center justify-content-center",
-                      icon("binoculars", style = "font-size: 1.2rem; color: #28a745; margin-right: 10px;"),
+        div(
+          style = "display: flex; gap: 10px; justify-content: center; margin-bottom: 10px;",
+          
+          div(style = "flex: 1;",
+              card(
+                class = "text-center mb-0 dark-border",
+                card_body(
+                  div(class = "d-flex align-items-center justify-content-center",
+                      icon("binoculars", style = "font-size: 1.2rem; color: #28a745; margin-right: 6px;"),
                       div(
-                        h4(textOutput("inat_observations"), class = "mb-0 text-primary"),
+                        h4(textOutput("inat_observations"), class = "mb-0 text-primary", style = "font-size: 1.1rem; font-weight: bold;"),
                         div("Observations", class = "text-muted small")
                       )
-                    )
                   )
                 )
-            ),
-            
-            # Observers
-            div(class = "col-6",
-                card(
-                  class = "text-center",
-                  card_body(
-                    div(
-                      class = "d-flex align-items-center justify-content-center",
-                      icon("users", style = "font-size: 1.2rem; color: #17a2b8; margin-right: 10px;"),
+              )
+          ),
+          
+          div(style = "flex: 1;",
+              card(
+                class = "text-center mb-0 dark-border",
+                card_body(
+                  div(class = "d-flex align-items-center justify-content-center",
+                      icon("users", style = "font-size: 1.2rem; color: #17a2b8; margin-right: 6px;"),
                       div(
-                        h4(textOutput("inat_people"), class = "mb-0 text-info"),
+                        h4(textOutput("inat_people"), class = "mb-0 text-info", style = "font-size: 1.1rem; font-weight: bold;"),
                         div("Observers", class = "text-muted small")
                       )
                   )
                 )
-            )
+              )
+          )
         ),
         
         # Pie chart for species by taxa BELOW stats
         div(class = "text-center",
-            plotlyOutput("spp_plot", height = "350px"),
+            plotlyOutput("spp_plot", height = "250px"),
             div(id = "spp_legend", class = "mt-2")
         )
-    )
-  ),
+    ),
     
     #### eBird Section ####
-    div(class = "p-3 border border-light rounded",
-        h3("eBird", class = "text-center text-primary mb-3"),
+    div(class = "p-3 border border-medium rounded",
+        h3("eBird", class = "text-center mb-3", style = "color: #4a4a4a;"),
         
         # Stats with icons ABOVE the pie chart
-        div(class = "row g-2 mb-3",
-            
-            # Checklists
-            div(class = "col-6",
-                card(
-                  class = "text-center",
-                  card_body(
-                    div(
-                      class = "d-flex align-items-center justify-content-center",
-                      icon("clipboard-list", style = "font-size: 1.2rem; color: #28a745; margin-right: 10px;"),
+        div(
+          style = "display: flex; gap: 10px; justify-content: center; margin-bottom: 10px;",
+          
+          div(style = "flex: 1;",
+              card(
+                class = "text-center mb-0 dark-border",
+                card_body(
+                  div(class = "d-flex align-items-center justify-content-center",
+                      icon("clipboard-list", style = "font-size: 1.2rem; color: #28a745; margin-right: 6px;"),
                       div(
-                        h4(textOutput("ebird_checklists"), class = "mb-0 text-primary"),
+                        h4(textOutput("ebird_checklists"), class = "mb-0 text-primary", style = "font-size: 1.1rem; font-weight: bold;"),
                         div("Checklists", class = "text-muted small")
                       )
-                    )
                   )
                 )
-            ),
-            
-            # Observers
-            div(class = "col-6",
-                card(
-                  class = "text-center",
-                  card_body(
-                    div(
-                      class = "d-flex align-items-center justify-content-center",
-                      icon("users", style = "font-size: 1.2rem; color: #17a2b8; margin-right: 10px;"),
+              )
+          ),
+          
+          div(style = "flex: 1;",
+              card(
+                class = "text-center mb-0 dark-border",
+                card_body(
+                  div(class = "d-flex align-items-center justify-content-center",
+                      icon("users", style = "font-size: 1.2rem; color: #17a2b8; margin-right: 6px;"),
                       div(
-                        h4(textOutput("ebird_observers"), class = "mb-0 text-info"),
+                        h4(textOutput("ebird_observers"), class = "mb-0 text-info", style = "font-size: 1.1rem; font-weight: bold;"),
                         div("Observers", class = "text-muted small")
                       )
-                    )
                   )
                 )
-            )
+              )
+          )
         ),
         
         # Pie chart for species by taxonomic group BELOW stats
         div(class = "text-center",
-            plotlyOutput("ebird_spp_plot", height = "350px"),
+            plotlyOutput("ebird_spp_plot", height = "250px"),
             div(id = "ebird_spp_legend", class = "mt-2")
         )
     )
@@ -217,7 +195,7 @@ server <- function(input, output, session) {
     if(n_colors <= 8) {
       rev(viridis(n_colors, option = "D", end = 0.85))
     } else {
-      # Use multiple viridis family palettes - all colorblind friendly
+      # Use multiple viridis family palettes - colorblind friendly
       base_colors <- c(
         rev(viridis(8, option = "D", end = 0.85)),  # Classic viridis (purple-teal)
         rocket(6, begin = 0.4),
@@ -272,14 +250,13 @@ server <- function(input, output, session) {
             values = ~n,
             type = "pie", 
             hole = 0.6,
-            domain = list(x = c(0.1, 0.9), y = c(0.1, 0.9)),
             marker = list(colors = chart_colors,
                           line = list(color = "white", width = 2)),
             textinfo = "none",
             hovertemplate = "<b>%{label}</b><br>Species: %{value} (%{percent})<extra></extra>") %>%
       layout(
         showlegend = FALSE,
-        margin = list(t = 5, b = 5, l = 5, r = 5),
+        margin = list(t = 10, b = 10, l = 10, r = 10),
         paper_bgcolor = "transparent",  # Remove white background
         plot_bgcolor = "transparent", 
         annotations = list(
@@ -335,14 +312,13 @@ server <- function(input, output, session) {
             values = ~n,
             type = "pie", 
             hole = 0.6,
-            domain = list(x = c(0.1, 0.9), y = c(0.1, 0.9)),
             marker = list(colors = chart_colors,
                           line = list(color = "white", width = 2)),
             textinfo = "none",
             hovertemplate = "<b>%{label}</b><br>Species: %{value} (%{percent})<extra></extra>") %>%
       layout(
         showlegend = FALSE,
-        margin = list(t = 5, b = 5, l = 5, r = 5),
+        margin = list(t = 10, b = 10, l = 10, r = 10),
         paper_bgcolor = "transparent",  # Remove white background
         plot_bgcolor = "transparent", 
         annotations = list(
