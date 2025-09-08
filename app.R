@@ -749,8 +749,8 @@ server <- function(input, output, session) {
       # Create color palette for sites
       sites <- unique(plot_data_filtered$site)
       site_colors <- c(
-        "Great Meadow 1" = "black", "Great Meadow 2" = "red", "Great Meadow 3" = "green",
-        "Great Meadow 4" = "orange", "Great Meadow 5" = "purple", "Great Meadow 6" = "brown",
+        "Great Meadow 1" = "black", "Great Meadow 2" = "chartreuse4", "Great Meadow 3" = "green",
+        "Great Meadow 4" = "darkorange", "Great Meadow 5" = "deeppink2", "Great Meadow 6" = "purple",
         "Gilmore Meadow" = "darkgray", "Precipitation" = "blue"
       )
       
