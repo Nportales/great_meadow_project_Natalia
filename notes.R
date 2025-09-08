@@ -1,3 +1,3817 @@
+#9/8/25 experimenting with precipitation line scaling 
+library(shiny)
+library(tidyverse)
+library(lubridate)
+library(patchwork)
+library(shinyWidgets)
+library(DT)
+library(bslib)
+
+# Read & prepare processed data
+gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250715.csv") %>%
+  rename(Date = date, Year = year, precip_cm = precip.cm) %>%
+  mutate(Date = as.Date(Date),
+         timestamp = as_datetime(timestamp),
+         site = paste("Great Meadow", plot.num),
+         water.depth = case_when(
+           Year == 2016 & doy_h == 159.12 & plot.num == 3 & water.depth < -120 ~ NA_real_,
+           Year == 2017 & doy_h == 215.02 & plot.num == 6 & water.depth < -115 ~ NA_real_,
+           Year == 2021 & plot.num == 3 & doy == 224 & water.depth > 400 ~ NA_real_,
+           Year == 2021 & plot.num == 3 & doy == 225 & water.depth > 400 ~ NA_real_,
+           TRUE ~ water.depth
+         )) %>%
+  mutate(siteyear = paste(site, Year, sep = "_"))
+
+gl <- read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv") %>%
+  rename(water.depth = GILM_WL) %>%
+  mutate(
+    site = "Gilmore Meadow",
+    
+    # Try to parse full datetime, fallback to date only + midnight
+    timestamp_parsed = mdy_hm(timestamp),
+    timestamp_parsed = if_else(
+      is.na(timestamp_parsed),
+      mdy(timestamp),
+      timestamp_parsed
+    ),
+    timestamp_parsed = as.POSIXct(timestamp_parsed),
+    timestamp = timestamp_parsed,
+    
+    # Standardize Date column too
+    Date = mdy(Date)
+  ) %>%
+  select(timestamp, 
+         Date,
+         doy,
+         Year,
+         precip_cm,
+         water.depth,
+         lag.precip,
+         hr,
+         doy_h,
+         site)
+
+all_data <- bind_rows(gm, gl) %>% 
+  filter(Year >= 2016 & Year <= 2023) %>% 
+  select(timestamp, 
+         date = Date, 
+         year = Year, 
+         doy, 
+         hr, 
+         doy_h,
+         precip_cm,
+         lag_precip = lag.precip,
+         water_depth = water.depth,
+         site)
+
+wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>% 
+  select(year,
+         stat, 
+         `Gilmore Meadow` = gilmore.meadow, 
+         `Great Meadow 1` = great.meadow.1, 
+         `Great Meadow 2` = great.meadow.2, 
+         `Great Meadow 3` = great.meadow.3, 
+         `Great Meadow 4` = great.meadow.4, 
+         `Great Meadow 5` = great.meadow.5, 
+         `Great Meadow 6` = great.meadow.6) %>% 
+  pivot_longer(cols = -c(year, stat), names_to = "site", values_to = "value") %>% 
+  pivot_wider(names_from = stat, values_from = value) %>%
+  arrange(site, year) %>% 
+  mutate(
+    wetland = case_when(
+      grepl("Great Meadow", site, ignore.case = TRUE) ~ "Great Meadow",
+      grepl("Gilmore Meadow", site, ignore.case = TRUE) ~ "Gilmore Meadow",
+      TRUE ~ "Unknown"
+    )
+  )
+
+
+# Function to calculate significance tests between wetlands
+calculate_wetland_significance <- function(data, selected_years, selected_sites, alpha = 0.05) {
+  # Filter data for selected years and sites
+  filtered_data <- data %>%
+    filter(year %in% selected_years, site %in% selected_sites) %>%
+    mutate(site_group = ifelse(grepl("Great Meadow", site), "Great Meadow", site))
+  
+  # Check if we have both wetlands represented in the selected sites
+  wetlands_present <- unique(filtered_data$site_group)
+  
+  # Only run tests if both wetlands are present
+  if (length(wetlands_present) < 2 || !all(c("Great Meadow", "Gilmore Meadow") %in% wetlands_present)) {
+    return(NULL)  # Return NULL if we can't compare between wetlands
+  }
+  
+  # Get all numeric stat columns
+  stat_cols <- filtered_data %>% select(where(is.numeric), -year) %>% names()
+  
+  # Run t-tests for each variable and store results
+  t_test_results <- map_dfr(stat_cols, function(var) {
+    formula <- as.formula(paste(var, "~ site_group"))
+    tryCatch({
+      test <- t.test(formula, data = filtered_data)
+      data.frame(
+        variable = var,
+        p_value = test$p.value,
+        significant = test$p.value < alpha,
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      data.frame(
+        variable = var,
+        p_value = NA,
+        significant = FALSE,
+        stringsAsFactors = FALSE
+      )
+    })
+  })
+  
+  return(t_test_results)
+}
+
+
+# UI 
+ui <- page_fluid(
+  theme = bs_theme(
+    version = 5,
+    bootswatch = "flatly",
+    primary = "#1B365D",
+    secondary = "#4C6D9A",    
+    success = "#2E86C1",
+    info = "#3498db",
+    warning = "#f39c12",
+    danger = "#e74c3c",
+    base_font = font_google("Open Sans"),
+    heading_font = font_google("Open Sans", wght = c(400, 700))
+  ),
+  
+  # Custom CSS for additional styling
+  tags$head(
+    tags$style(HTML("
+      .content-section {
+        margin: 30px 0;
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border: 2px solid #1B365D;
+      }
+      
+      .section-title {
+        color: #1B365D;
+        font-weight: 600;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #4C6D9A;
+      }
+      
+      .sidebar-custom {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border: 1px solid #dee2e6;
+      }
+      
+      .main-title {
+        background: linear-gradient(135deg, #1B365D 0%, #4C6D9A 100%);
+        color: white;
+        padding: 30px;
+        margin: -15px -15px 30px -15px;
+        text-align: center;
+        border-radius: 0 0 20px 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      
+      .brush-info-section {
+        background: linear-gradient(135deg, #e8f4f8 0%, #f0f8ff 100%);
+        border-radius: 12px;
+        padding: 20px;
+        margin: 20px 0;
+        border: 1px solid #4C6D9A;
+      }
+      
+      .stats-main {
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+      }
+      
+      .dataTables_wrapper {
+        font-size: 0.85rem !important;
+      }
+
+      .dataTables_wrapper table {
+        font-size: 0.8rem !important;
+      }
+
+      .dataTables_wrapper .dataTables_info,
+      .dataTables_wrapper .dataTables_paginate {
+        font-size: 0.75rem !important;
+      }
+      
+    "))
+  ),
+  
+  # Main title with gradient background
+  div(class = "main-title",
+      h1("Wetland Hydrograph Visualizer", 
+         style = "margin: 0; font-size: 2rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3)")
+  ),
+  
+  # First section: Hydrographs 
+  div(class = "content-section",
+      layout_sidebar(
+        sidebar = sidebar(
+          class = "sidebar-custom",
+          width = 300,
+          h4("Hydrograph Controls", style = "color: #1B365D; margin-bottom: 20px;"),
+          
+          pickerInput("selected_sites", 
+                      label = div(icon("map-marker"), "Select Site(s):"),
+                      choices = sort(unique(all_data$site)),
+                      selected = c("Great Meadow 1", "Gilmore Meadow"),
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `deselect-all-text` = "Clear all",
+                        `select-all-text` = "Select all",
+                        `none-selected-text` = "Choose site(s)",
+                        `live-search` = TRUE,
+                        style = "btn-outline-primary"
+                      )),
+          
+          div(style = "margin-bottom: 15px;",
+              pickerInput("year", 
+                          label = div(icon("calendar"), "Select Year(s):"),
+                          choices = sort(unique(all_data$year)),
+                          selected = 2023,
+                          multiple = TRUE,
+                          options = list(
+                            `actions-box` = TRUE,
+                            `deselect-all-text` = "Clear all",
+                            `select-all-text` = "Select all",
+                            `none-selected-text` = "Choose year(s)",
+                            `live-search` = TRUE,
+                            style = "btn-outline-primary"
+                          ))),
+          
+          br(),
+          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Use the brush tool to select data points on the hydrograph for a detailed view of the data.", 
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
+          
+          div(style = "margin-top: 15px; text-align: center;",
+              downloadButton("download_brush", "Download Selected Data", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("download")))
+        ),
+        
+        card(
+          full_screen = TRUE,
+          card_header(
+            class = "bg-primary text-white",
+            "Hydrographs by Year"
+          ),
+          plotOutput("hydrograph", height = "600px", 
+                     brush = brushOpts(id = "hydro_brush", fill = "#4C6D9A", opacity = 0.3))
+        )
+      )
+  ),
+  
+  # Selected data points section with improved styling
+  div(class = "brush-info-section",
+      div(class = "row",
+          div(class = "col-12",
+              card(
+                card_header(
+                  class = "bg-success text-white",
+                  "Selected Data from Hydrograph:"
+                ),
+                tableOutput("brush_info")
+              )
+          )
+      )
+  ),
+  
+  # Second section: Water Level Stats with improved styling
+  div(class = "content-section stats-main",
+      layout_sidebar(
+        sidebar = sidebar(
+          class = "sidebar-custom",
+          width = 300,
+          h4("Statistics Controls", style = "color: #1B365D; margin-bottom: 20px;"),
+          
+          pickerInput("stats_site", 
+                      label = div(icon("map-marker"), "Select Site(s):"),
+                      choices = sort(unique(wl_stats$site)),
+                      selected = "Great Meadow 1",
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `deselect-all-text` = "Clear all",
+                        `select-all-text` = "Select all",
+                        `none-selected-text` = "Choose site(s)",
+                        `live-search` = TRUE,
+                        style = "btn-outline-primary"
+                      )),
+          
+          div(style = "margin-bottom: 15px;",
+              pickerInput("stats_year", 
+                          label = div(icon("calendar"), "Select Years:"),
+                          choices = sort(unique(wl_stats$year)),
+                          selected = c(2023, 2022, 2021, 2020),
+                          multiple = TRUE,
+                          options = list(
+                            `actions-box` = TRUE,
+                            `deselect-all-text` = "Clear all",
+                            `select-all-text` = "Select all",
+                            `none-selected-text` = "Choose year(s)",
+                            `live-search` = TRUE,
+                            style = "btn-outline-primary"
+                          ))),
+          
+          div(style = "margin-bottom: 15px;",
+              radioButtons("time_summary", "Summarize Stats:",
+                           choices = c("Each Year" = "year", "Average Across Years" = "multi"),
+                           selected = "year",
+                           inline = TRUE)),
+          
+          br(),
+          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Growing Season statistics calculated from May through October.", 
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
+          
+          div(style = "margin-top: 15px; text-align: center;",
+              downloadButton("download_stats", "Download Table", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("download")))
+        ),
+        
+        card(
+          full_screen = TRUE,
+          card_header(
+            class = "bg-primary text-white",
+            "Growing Season Water Level Statistics"
+          ),
+          
+          div(style = "padding: 10px;",
+              uiOutput("significance_info"),
+              dataTableOutput("wl_stats"))
+        )
+      )
+  )
+)
+
+# Server
+server <- function(input, output, session) {
+  
+  # Reactive data for plotting
+  plot_data <- reactive({
+    req(input$year, input$selected_sites)
+    
+    all_data %>%
+      filter(year %in% input$year, doy > 134, doy < 275) %>%
+      filter(site %in% input$selected_sites)
+  })
+  
+  output$hydrograph <- renderPlot({
+    plot_data_filtered <- plot_data()
+    req(nrow(plot_data_filtered) > 0)
+    
+    # Calculate minimum water level across all data for consistent precipitation baseline
+    minWL <- min(plot_data_filtered$water_depth, na.rm = TRUE)
+    
+    # Color palette for sites
+    sites <- unique(plot_data_filtered$site)
+    site_colors <- c(
+      "Great Meadow 1" = "black", "Great Meadow 2" = "chartreuse4", "Great Meadow 3" = "green",
+      "Great Meadow 4" = "darkorange", "Great Meadow 5" = "deeppink2", "Great Meadow 6" = "purple",
+      "Gilmore Meadow" = "darkgray", "Precipitation" = "blue"
+    )
+    
+    # Create the plot
+    ggplot(plot_data_filtered, aes(x = doy_h, y = water_depth)) +
+      # Water level lines by site
+      geom_line(aes(color = site), size = 0.7) +
+      
+      # Precipitation line (scaled by multiplier of 5 and offset by minWL)
+      geom_line(aes(x = doy_h, y = lag_precip * 5 + minWL, color = "Precipitation"), 
+                size = 0.7) +
+      
+      # Ground level reference
+      geom_hline(yintercept = 0, color = 'brown') +
+      
+      # Facet by year
+      facet_wrap(~ year, ncol = 1, scales = "free_y") +
+      
+      # Colors
+      scale_color_manual(values = site_colors, 
+                         breaks = c(sites, "Precipitation")) +
+      
+      # Axes and labels
+      labs(y = 'Water Level (cm)', x = 'Date') +
+      scale_x_continuous(
+        breaks = c(121, 152, 182, 213, 244, 274),
+        labels = c('May-01', 'Jun-01', 'Jul-01', 'Aug-01', 'Sep-01', 'Oct-01')
+      ) +
+      
+      # Secondary axis for precipitation
+      scale_y_continuous(
+        sec.axis = sec_axis(~ .,
+                            breaks = c(minWL, minWL + 10),
+                            name = 'Hourly Precip. (cm)',
+                            labels = c('0', '2'))
+      ) +
+      
+      # Theme
+      theme_bw() +
+      theme(
+        plot.title = element_text(hjust = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text.y.right = element_text(color = 'blue'),
+        axis.title.y.right = element_text(color = 'blue'),
+        strip.text = element_text(size = 11),
+        legend.position = "bottom",
+        legend.title = element_blank()
+      )
+  })
+  
+  # Reactive for processed brushed data
+  processed_brush_data <- reactive({
+    req(input$hydro_brush)
+    
+    plot_data_filtered <- plot_data()
+    req(nrow(plot_data_filtered) > 0)
+    
+    selected_data <- brushedPoints(
+      plot_data_filtered,
+      brush = input$hydro_brush,
+      xvar = "doy_h",
+      yvar = "water_depth"
+    ) %>%
+      select(site, year, doy_h, timestamp, water_depth, lag_precip) %>%
+      arrange(year, doy_h) %>%
+      mutate(
+        doy_h = round(doy_h, 2),
+        water_depth = round(water_depth, 2),
+        lag_precip = round(lag_precip, 3),
+        timestamp = format(timestamp, "%Y-%m-%d %H:%M:%S")
+      )
+    
+    if (nrow(selected_data) == 0) {
+      return(data.frame(Message = "No points selected - try brushing over the water level lines"))
+    }
+    
+    # Create the base data with timestamp and precipitation
+    base_data <- selected_data %>%
+      mutate(doy_h_rounded = round(doy_h, 1)) %>%
+      group_by(year, doy_h_rounded) %>%
+      summarise(
+        timestamp = first(timestamp),
+        doy_h_orig = first(doy_h),
+        lag_precip = first(lag_precip),
+        .groups = 'drop'
+      )
+    
+    # Create water depth data for each site, taking the mean of duplicates
+    water_depth_data <- selected_data %>%
+      mutate(doy_h_rounded = round(doy_h, 1)) %>%
+      group_by(year, doy_h_rounded, site) %>%
+      summarise(water_depth = mean(water_depth, na.rm = TRUE), .groups = 'drop') %>%
+      pivot_wider(names_from = site, values_from = water_depth, names_prefix = "")
+    
+    # Join the data together
+    result_data <- base_data %>%
+      left_join(water_depth_data, by = c("year", "doy_h_rounded")) %>%
+      select(-doy_h_rounded) %>%
+      rename(
+        `Year` = year, 
+        `Timestamp` = timestamp,
+        `Day of Year` = doy_h_orig,
+        `Precipitation (cm)` = lag_precip
+      )
+    
+    # Add " Water Depth (cm)" suffix to site columns
+    site_columns <- intersect(names(result_data), input$selected_sites)
+    if (length(site_columns) > 0) {
+      result_data <- result_data %>%
+        rename_with(~ paste(.x, "Water Depth (cm)"), .cols = all_of(site_columns))
+    }
+    
+    result_data %>% arrange(Year, `Day of Year`)
+  })
+  
+  # Reactive for significance testing results - now checks if both wetlands are selected
+  significance_results <- reactive({
+    req(input$stats_year, input$stats_site)
+    
+    # Check if both wetlands are represented in selected sites
+    selected_wetlands <- wl_stats %>%
+      filter(site %in% input$stats_site) %>%
+      pull(wetland) %>%
+      unique()
+    
+    # Only calculate significance if both wetlands are represented
+    if (length(selected_wetlands) >= 2 && all(c("Great Meadow", "Gilmore Meadow") %in% selected_wetlands)) {
+      calculate_wetland_significance(wl_stats, input$stats_year, input$stats_site, alpha = 0.05)
+    } else {
+      NULL
+    }
+  })
+  
+  # Reactive to determine if we should show significance info
+  show_significance_info <- reactive({
+    req(input$stats_site, input$time_summary)
+    
+    if (input$time_summary != "multi") return(FALSE)
+    
+    selected_wetlands <- wl_stats %>%
+      filter(site %in% input$stats_site) %>%
+      pull(wetland) %>%
+      unique()
+    
+    return(length(selected_wetlands) >= 2 && all(c("Great Meadow", "Gilmore Meadow") %in% selected_wetlands))
+  })
+  
+  
+  # setting up average WL stats and calculating stats output tables
+  filtered_stats <- reactive({
+    req(input$stats_site, input$stats_year, input$time_summary)
+    
+    data <- wl_stats %>%
+      filter(site %in% input$stats_site, year %in% input$stats_year)
+    
+    if (input$time_summary == "year") {
+      # ---- Option 1: Per-Year Summary ----
+      data %>%
+        mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
+        select(
+          Year = year,
+          Site = site,
+          `Mean Water Level (cm)` = WL_mean,
+          `SD Water Level (cm)` = WL_sd,
+          `Minimum Water Level (cm)` = WL_min,
+          `Maximum Water Level (cm)` = WL_max,
+          `Maximum Hourly Increase (cm)` = max_inc,
+          `Maximum Hourly Decrease (cm)` = max_dec,
+          `Growing Season Change (cm)` = GS_change,
+          `GS % Surface Water` = prop_over_0cm,
+          `GS % Within 30cm` = prop_bet_0_neg30cm,
+          `GS % Over 30cm Deep` = prop_under_neg30cm
+        )
+    } else {
+      # ---- Option 2: Average Across Years ----
+      # Per-site summary
+      data_site <- data %>%
+        group_by(site, wetland) %>%
+        summarise(
+          Year = paste0(min(year), "–", max(year)),
+          `Mean Water Level (cm)` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level (cm)` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level (cm)` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level (cm)` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase (cm)` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease (cm)` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change (cm)` = round(mean(GS_change, na.rm = TRUE), 2),
+          `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
+          `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
+          `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
+          .groups = "drop"
+        )
+      
+      # Per-wetland "All Sites" summary
+      data_wetland <- data %>%
+        group_by(wetland) %>%
+        summarise(
+          site = "All Sites",
+          Year = paste0(min(year), "–", max(year)),
+          `Mean Water Level (cm)` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level (cm)` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level (cm)` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level (cm)` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase (cm)` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease (cm)` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change (cm)` = round(mean(GS_change, na.rm = TRUE), 2),
+          `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
+          `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
+          `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
+          .groups = "drop"
+        )
+      
+      bind_rows(data_site, data_wetland) %>%
+        distinct() %>% 
+        rename(Site = site,
+               Wetland = wetland)
+    }
+  })
+  
+  # reactive table output for selected data from hydrograph
+  output$brush_info <- renderTable({
+    processed_brush_data()
+  })
+  
+  # Output for significance information display
+  output$significance_info <- renderUI({
+    if (show_significance_info()) {
+      sig_results <- significance_results()
+      
+      if (!is.null(sig_results)) {
+        sig_vars <- sig_results %>% 
+          filter(significant) %>% 
+          pull(variable)
+        
+        if (length(sig_vars) > 0) {
+          # Map variable names to display names
+          var_display_names <- c(
+            "WL_mean" = "Mean Water Level",
+            "WL_sd" = "SD Water Level", 
+            "WL_min" = "Minimum Water Level",
+            "WL_max" = "Maximum Water Level",
+            "max_inc" = "Maximum Hourly Increase",
+            "max_dec" = "Maximum Hourly Decrease",
+            "GS_change" = "Growing Season Change",
+            "prop_over_0cm" = "GS % Surface Water",
+            "prop_bet_0_neg30cm" = "GS % Within 30cm",
+            "prop_under_neg30cm" = "GS % Over 30cm Deep"
+          )
+          
+          sig_display_names <- var_display_names[sig_vars]
+          sig_display_names <- sig_display_names[!is.na(sig_display_names)]
+          
+          div(class = "significance-info",
+              h5(icon("exclamation-triangle"), " Statistical Significance", 
+                 style = "color: #856404; margin-bottom: 10px;"),
+              p("Highlighted variables show significant differences (p < 0.05) between Great Meadow and Gilmore Meadow wetlands:", 
+                style = "margin-bottom: 8px; font-size: 0.9rem;"),
+              tags$ul(
+                lapply(sig_display_names, function(name) {
+                  tags$li(name, style = "font-size: 0.85rem; color: #856404;")
+                })
+              ),
+              p("Statistical tests compare averages across all selected years and sites within each wetland.", 
+                style = "margin-top: 5px; margin-bottom: 10px; font-size: 0.8rem; font-style: italic; color: #6c757d;")
+          )
+        }
+      }
+    }
+  })
+  
+  # reactive table output for WL stats with significance highlighting
+  output$wl_stats <- DT::renderDataTable({
+    data <- filtered_stats()
+    
+    dt <- datatable(
+      data,
+      options = list(pageLength = 10, scrollX = TRUE)
+    ) %>%
+      formatStyle(
+        'Site',
+        target = 'cell',
+        fontWeight = styleEqual("All Sites", "bold")
+      )
+    
+    # Add significance highlighting only when appropriate
+    if (show_significance_info()) {
+      sig_results <- significance_results()
+      
+      if (!is.null(sig_results)) {
+        # Map variable names to column names in the table
+        var_mapping <- c(
+          "WL_mean" = "Mean Water Level (cm)",
+          "WL_sd" = "SD Water Level (cm)", 
+          "WL_min" = "Minimum Water Level (cm)",
+          "WL_max" = "Maximum Water Level (cm)",
+          "max_inc" = "Maximum Hourly Increase (cm)",
+          "max_dec" = "Maximum Hourly Decrease (cm)",
+          "GS_change" = "Growing Season Change (cm)",
+          "prop_over_0cm" = "GS % Surface Water",
+          "prop_bet_0_neg30cm" = "GS % Within 30cm",
+          "prop_under_neg30cm" = "GS % Over 30cm Deep"
+        )
+        
+        # Apply highlighting for significant variables
+        for (var_name in names(var_mapping)) {
+          col_name <- var_mapping[var_name]
+          sig_row <- sig_results[sig_results$variable == var_name, ]
+          
+          if (nrow(sig_row) > 0 && sig_row$significant) {
+            dt <- dt %>%
+              formatStyle(
+                col_name,
+                valueColumns = "Site",
+                backgroundColor = styleEqual("All Sites", "#fff3cd"),
+                fontWeight = styleEqual("All Sites", "bold")
+              )
+          }
+        }
+      }
+    }
+    
+    dt
+  })
+  
+  # Download handler for brushed data
+  output$download_brush <- downloadHandler(
+    filename = function() {
+      paste("hydrograph_selected_data_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      write.csv(processed_brush_data(), file, row.names = FALSE)
+    }
+  )
+  
+  # Download handler for water level stats
+  output$download_stats <- downloadHandler(
+    filename = function() {
+      if (input$time_summary == "multi") {
+        paste("wetland_averaged_stats_", Sys.Date(), ".csv", sep = "")
+      } else {
+        paste("site_stats_", Sys.Date(), ".csv", sep = "")
+      }
+    },
+    content = function(file) {
+      write.csv(filtered_stats(), file, row.names = FALSE)
+    }
+  )
+  
+}
+
+# Run app
+shinyApp(ui, server)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+library(shiny)
+library(tidyverse)
+library(lubridate)
+library(patchwork)
+library(shinyWidgets)
+library(DT)
+library(bslib)
+
+# Read & prepare processed data
+gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250715.csv") %>%
+  rename(Date = date, Year = year, precip_cm = precip.cm) %>%
+  mutate(Date = as.Date(Date),
+         timestamp = as_datetime(timestamp),
+         site = paste("Great Meadow", plot.num),
+         water.depth = case_when(
+           Year == 2016 & doy_h == 159.12 & plot.num == 3 & water.depth < -120 ~ NA_real_,
+           Year == 2017 & doy_h == 215.02 & plot.num == 6 & water.depth < -115 ~ NA_real_,
+           Year == 2021 & plot.num == 3 & doy == 224 & water.depth > 400 ~ NA_real_,
+           Year == 2021 & plot.num == 3 & doy == 225 & water.depth > 400 ~ NA_real_,
+           TRUE ~ water.depth
+         )) %>%
+  mutate(siteyear = paste(site, Year, sep = "_"))
+
+gl <- read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv") %>%
+  rename(water.depth = GILM_WL) %>%
+  mutate(
+    site = "Gilmore Meadow",
+    
+    # Try to parse full datetime, fallback to date only + midnight
+    timestamp_parsed = mdy_hm(timestamp),
+    timestamp_parsed = if_else(
+      is.na(timestamp_parsed),
+      mdy(timestamp),
+      timestamp_parsed
+    ),
+    timestamp_parsed = as.POSIXct(timestamp_parsed),
+    timestamp = timestamp_parsed,
+    
+    # Standardize Date column too
+    Date = mdy(Date)
+  ) %>%
+  select(timestamp, 
+         Date,
+         doy,
+         Year,
+         precip_cm,
+         water.depth,
+         lag.precip,
+         hr,
+         doy_h,
+         site)
+
+all_data <- bind_rows(gm, gl) %>% 
+  filter(Year >= 2016 & Year <= 2023) %>% 
+  select(timestamp, 
+         date = Date, 
+         year = Year, 
+         doy, 
+         hr, 
+         doy_h,
+         precip_cm,
+         lag_precip = lag.precip,
+         water_depth = water.depth,
+         site)
+
+wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>% 
+  select(year,
+         stat, 
+         `Gilmore Meadow` = gilmore.meadow, 
+         `Great Meadow 1` = great.meadow.1, 
+         `Great Meadow 2` = great.meadow.2, 
+         `Great Meadow 3` = great.meadow.3, 
+         `Great Meadow 4` = great.meadow.4, 
+         `Great Meadow 5` = great.meadow.5, 
+         `Great Meadow 6` = great.meadow.6) %>% 
+  pivot_longer(cols = -c(year, stat), names_to = "site", values_to = "value") %>% 
+  pivot_wider(names_from = stat, values_from = value) %>%
+  arrange(site, year) %>% 
+  mutate(
+    wetland = case_when(
+      grepl("Great Meadow", site, ignore.case = TRUE) ~ "Great Meadow",
+      grepl("Gilmore Meadow", site, ignore.case = TRUE) ~ "Gilmore Meadow",
+      TRUE ~ "Unknown"
+    )
+  )
+
+
+# Function to calculate significance tests between wetlands
+calculate_wetland_significance <- function(data, selected_years, selected_sites, alpha = 0.05) {
+  # Filter data for selected years and sites
+  filtered_data <- data %>%
+    filter(year %in% selected_years, site %in% selected_sites) %>%
+    mutate(site_group = ifelse(grepl("Great Meadow", site), "Great Meadow", site))
+  
+  # Check if we have both wetlands represented in the selected sites
+  wetlands_present <- unique(filtered_data$site_group)
+  
+  # Only run tests if both wetlands are present
+  if (length(wetlands_present) < 2 || !all(c("Great Meadow", "Gilmore Meadow") %in% wetlands_present)) {
+    return(NULL)  # Return NULL if we can't compare between wetlands
+  }
+  
+  # Get all numeric stat columns
+  stat_cols <- filtered_data %>% select(where(is.numeric), -year) %>% names()
+  
+  # Run t-tests for each variable and store results
+  t_test_results <- map_dfr(stat_cols, function(var) {
+    formula <- as.formula(paste(var, "~ site_group"))
+    tryCatch({
+      test <- t.test(formula, data = filtered_data)
+      data.frame(
+        variable = var,
+        p_value = test$p.value,
+        significant = test$p.value < alpha,
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      data.frame(
+        variable = var,
+        p_value = NA,
+        significant = FALSE,
+        stringsAsFactors = FALSE
+      )
+    })
+  })
+  
+  return(t_test_results)
+}
+
+
+# UI 
+ui <- page_fluid(
+  theme = bs_theme(
+    version = 5,
+    bootswatch = "flatly",
+    primary = "#1B365D",
+    secondary = "#4C6D9A",    
+    success = "#2E86C1",
+    info = "#3498db",
+    warning = "#f39c12",
+    danger = "#e74c3c",
+    base_font = font_google("Open Sans"),
+    heading_font = font_google("Open Sans", wght = c(400, 700))
+  ),
+  
+  # Custom CSS for additional styling
+  tags$head(
+    tags$style(HTML("
+      .content-section {
+        margin: 30px 0;
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border: 2px solid #1B365D;
+      }
+      
+      .section-title {
+        color: #1B365D;
+        font-weight: 600;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #4C6D9A;
+      }
+      
+      .sidebar-custom {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border: 1px solid #dee2e6;
+      }
+      
+      .main-title {
+        background: linear-gradient(135deg, #1B365D 0%, #4C6D9A 100%);
+        color: white;
+        padding: 30px;
+        margin: -15px -15px 30px -15px;
+        text-align: center;
+        border-radius: 0 0 20px 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      
+      .brush-info-section {
+        background: linear-gradient(135deg, #e8f4f8 0%, #f0f8ff 100%);
+        border-radius: 12px;
+        padding: 20px;
+        margin: 20px 0;
+        border: 1px solid #4C6D9A;
+      }
+      
+      .stats-main {
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+      }
+      
+      .dataTables_wrapper {
+        font-size: 0.85rem !important;
+      }
+
+      .dataTables_wrapper table {
+        font-size: 0.8rem !important;
+      }
+
+      .dataTables_wrapper .dataTables_info,
+      .dataTables_wrapper .dataTables_paginate {
+        font-size: 0.75rem !important;
+      }
+      
+    "))
+  ),
+  
+  # Main title with gradient background
+  div(class = "main-title",
+      h1("Wetland Hydrograph Visualizer", 
+         style = "margin: 0; font-size: 2rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3)")
+  ),
+  
+  # First section: Hydrographs 
+  div(class = "content-section",
+      layout_sidebar(
+        sidebar = sidebar(
+          class = "sidebar-custom",
+          width = 300,
+          h4("Hydrograph Controls", style = "color: #1B365D; margin-bottom: 20px;"),
+          
+          pickerInput("selected_sites", 
+                      label = div(icon("map-marker"), "Select Site(s):"),
+                      choices = sort(unique(all_data$site)),
+                      selected = c("Great Meadow 1", "Gilmore Meadow"),
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `deselect-all-text` = "Clear all",
+                        `select-all-text` = "Select all",
+                        `none-selected-text` = "Choose site(s)",
+                        `live-search` = TRUE,
+                        style = "btn-outline-primary"
+                      )),
+          
+          div(style = "margin-bottom: 15px;",
+              pickerInput("year", 
+                          label = div(icon("calendar"), "Select Year(s):"),
+                          choices = sort(unique(all_data$year)),
+                          selected = 2023,
+                          multiple = TRUE,
+                          options = list(
+                            `actions-box` = TRUE,
+                            `deselect-all-text` = "Clear all",
+                            `select-all-text` = "Select all",
+                            `none-selected-text` = "Choose year(s)",
+                            `live-search` = TRUE,
+                            style = "btn-outline-primary"
+                          ))),
+          
+          br(),
+          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Use the brush tool to select data points on the hydrograph for a detailed view of the data.", 
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
+          
+          div(style = "margin-top: 15px; text-align: center;",
+              downloadButton("download_brush", "Download Selected Data", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("download")))
+        ),
+        
+        card(
+          full_screen = TRUE,
+          card_header(
+            class = "bg-primary text-white",
+            "Hydrographs by Year"
+          ),
+          plotOutput("hydrograph", height = "600px", 
+                     brush = brushOpts(id = "hydro_brush", fill = "#4C6D9A", opacity = 0.3))
+        )
+      )
+  ),
+  
+  # Selected data points section with improved styling
+  div(class = "brush-info-section",
+      div(class = "row",
+          div(class = "col-12",
+              card(
+                card_header(
+                  class = "bg-success text-white",
+                  "Selected Data from Hydrograph:"
+                ),
+                tableOutput("brush_info")
+              )
+          )
+      )
+  ),
+  
+  # Second section: Water Level Stats with improved styling
+  div(class = "content-section stats-main",
+      layout_sidebar(
+        sidebar = sidebar(
+          class = "sidebar-custom",
+          width = 300,
+          h4("Statistics Controls", style = "color: #1B365D; margin-bottom: 20px;"),
+          
+          pickerInput("stats_site", 
+                      label = div(icon("map-marker"), "Select Site(s):"),
+                      choices = sort(unique(wl_stats$site)),
+                      selected = "Great Meadow 1",
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `deselect-all-text` = "Clear all",
+                        `select-all-text` = "Select all",
+                        `none-selected-text` = "Choose site(s)",
+                        `live-search` = TRUE,
+                        style = "btn-outline-primary"
+                      )),
+          
+          div(style = "margin-bottom: 15px;",
+              pickerInput("stats_year", 
+                          label = div(icon("calendar"), "Select Years:"),
+                          choices = sort(unique(wl_stats$year)),
+                          selected = c(2023, 2022, 2021, 2020),
+                          multiple = TRUE,
+                          options = list(
+                            `actions-box` = TRUE,
+                            `deselect-all-text` = "Clear all",
+                            `select-all-text` = "Select all",
+                            `none-selected-text` = "Choose year(s)",
+                            `live-search` = TRUE,
+                            style = "btn-outline-primary"
+                          ))),
+          
+          div(style = "margin-bottom: 15px;",
+              radioButtons("time_summary", "Summarize Stats:",
+                           choices = c("Each Year" = "year", "Average Across Years" = "multi"),
+                           selected = "year",
+                           inline = TRUE)),
+          
+          br(),
+          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Growing Season statistics calculated from May through October.", 
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
+          
+          div(style = "margin-top: 15px; text-align: center;",
+              downloadButton("download_stats", "Download Table", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("download")))
+        ),
+        
+        card(
+          full_screen = TRUE,
+          card_header(
+            class = "bg-primary text-white",
+            "Growing Season Water Level Statistics"
+          ),
+          
+          div(style = "padding: 10px;",
+              uiOutput("significance_info"),
+              dataTableOutput("wl_stats"))
+        )
+      )
+  )
+)
+
+# Server
+server <- function(input, output, session) {
+  
+  # Reactive data for plotting
+  plot_data <- reactive({
+    req(input$year, input$selected_sites)
+    
+    all_data %>%
+      filter(year %in% input$year, doy > 134, doy < 275) %>%
+      filter(site %in% input$selected_sites)
+  })
+  
+  output$hydrograph <- renderPlot({
+    plot_data_filtered <- plot_data()
+    req(nrow(plot_data_filtered) > 0)
+    
+    # Calculate minimum water level across all data for consistent precipitation baseline
+    minWL <- min(plot_data_filtered$water_depth, na.rm = TRUE)
+    
+    # Color palette for sites
+    sites <- unique(plot_data_filtered$site)
+    site_colors <- c(
+      "Great Meadow 1" = "black", "Great Meadow 2" = "chartreuse4", "Great Meadow 3" = "green",
+      "Great Meadow 4" = "darkorange", "Great Meadow 5" = "deeppink2", "Great Meadow 6" = "purple",
+      "Gilmore Meadow" = "darkgray", "Precipitation" = "blue"
+    )
+    
+    # Create the plot
+    ggplot(plot_data_filtered, aes(x = doy_h, y = water_depth)) +
+      # Water level lines by site
+      geom_line(aes(color = site), size = 0.7) +
+      
+      # Precipitation line (scaled by multiplier of 5 and offset by minWL)
+      geom_line(aes(x = doy_h, y = lag_precip * 5 + minWL, color = "Precipitation"), 
+                size = 0.7) +
+      
+      # Ground level reference
+      geom_hline(yintercept = 0, color = 'brown') +
+      
+      # Facet by year
+      facet_wrap(~ year, ncol = 1, scales = "free_y") +
+      
+      # Colors
+      scale_color_manual(values = site_colors, 
+                         breaks = c(sites, "Precipitation")) +
+      
+      # Axes and labels
+      labs(y = 'Water Level (cm)', x = 'Date') +
+      scale_x_continuous(
+        breaks = c(121, 152, 182, 213, 244, 274),
+        labels = c('May-01', 'Jun-01', 'Jul-01', 'Aug-01', 'Sep-01', 'Oct-01')
+      ) +
+      
+      # Secondary axis for precipitation
+      scale_y_continuous(
+        sec.axis = sec_axis(~ .,
+                            breaks = c(minWL, minWL + 10),
+                            name = 'Hourly Precip. (cm)',
+                            labels = c('0', '2'))
+      ) +
+      
+      # Theme
+      theme_bw() +
+      theme(
+        plot.title = element_text(hjust = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text.y.right = element_text(color = 'blue'),
+        axis.title.y.right = element_text(color = 'blue'),
+        strip.text = element_text(size = 11),
+        legend.position = "bottom",
+        legend.title = element_blank()
+      )
+  })
+  
+  # Reactive for processed brushed data - simplified approach like the example
+  processed_brush_data <- reactive({
+    req(input$hydro_brush)
+    
+    plot_data_filtered <- plot_data()
+    req(nrow(plot_data_filtered) > 0)
+    
+    # Simple approach: just show the brushed points as rows (like the example)
+    selected_data <- brushedPoints(
+      plot_data_filtered,
+      brush = input$hydro_brush,
+      xvar = "doy_h",
+      yvar = "water_depth"
+    ) %>%
+      select(timestamp, year, doy_h, site, water_depth, lag_precip) %>%
+      arrange(year, doy_h) %>%
+      mutate(
+        doy_h = round(doy_h, 2),
+        water_depth = round(water_depth, 2),
+        lag_precip = round(lag_precip, 3),
+        timestamp = format(timestamp, "%Y-%m-%d %H:%M:%S")
+      ) %>%
+      rename(
+        Timestamp = timestamp,
+        Year = year,
+        `Day of Year` = doy_h,
+        Site = site,
+        `Water Depth (cm)` = water_depth,
+        `Precipitation (cm)` = lag_precip
+      )
+    
+    if (nrow(selected_data) == 0) {
+      return(data.frame(Message = "No points selected - try brushing over the water level lines"))
+    }
+    
+    return(selected_data)
+  })
+  
+  # Reactive for significance testing results - now checks if both wetlands are selected
+  significance_results <- reactive({
+    req(input$stats_year, input$stats_site)
+    
+    # Check if both wetlands are represented in selected sites
+    selected_wetlands <- wl_stats %>%
+      filter(site %in% input$stats_site) %>%
+      pull(wetland) %>%
+      unique()
+    
+    # Only calculate significance if both wetlands are represented
+    if (length(selected_wetlands) >= 2 && all(c("Great Meadow", "Gilmore Meadow") %in% selected_wetlands)) {
+      calculate_wetland_significance(wl_stats, input$stats_year, input$stats_site, alpha = 0.05)
+    } else {
+      NULL
+    }
+  })
+  
+  # Reactive to determine if we should show significance info
+  show_significance_info <- reactive({
+    req(input$stats_site, input$time_summary)
+    
+    if (input$time_summary != "multi") return(FALSE)
+    
+    selected_wetlands <- wl_stats %>%
+      filter(site %in% input$stats_site) %>%
+      pull(wetland) %>%
+      unique()
+    
+    return(length(selected_wetlands) >= 2 && all(c("Great Meadow", "Gilmore Meadow") %in% selected_wetlands))
+  })
+  
+  
+  # setting up average WL stats and calculating stats output tables
+  filtered_stats <- reactive({
+    req(input$stats_site, input$stats_year, input$time_summary)
+    
+    data <- wl_stats %>%
+      filter(site %in% input$stats_site, year %in% input$stats_year)
+    
+    if (input$time_summary == "year") {
+      # ---- Option 1: Per-Year Summary ----
+      data %>%
+        mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
+        select(
+          Year = year,
+          Site = site,
+          `Mean Water Level (cm)` = WL_mean,
+          `SD Water Level (cm)` = WL_sd,
+          `Minimum Water Level (cm)` = WL_min,
+          `Maximum Water Level (cm)` = WL_max,
+          `Maximum Hourly Increase (cm)` = max_inc,
+          `Maximum Hourly Decrease (cm)` = max_dec,
+          `Growing Season Change (cm)` = GS_change,
+          `GS % Surface Water` = prop_over_0cm,
+          `GS % Within 30cm` = prop_bet_0_neg30cm,
+          `GS % Over 30cm Deep` = prop_under_neg30cm
+        )
+    } else {
+      # ---- Option 2: Average Across Years ----
+      # Per-site summary
+      data_site <- data %>%
+        group_by(site, wetland) %>%
+        summarise(
+          Year = paste0(min(year), "–", max(year)),
+          `Mean Water Level (cm)` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level (cm)` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level (cm)` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level (cm)` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase (cm)` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease (cm)` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change (cm)` = round(mean(GS_change, na.rm = TRUE), 2),
+          `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
+          `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
+          `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
+          .groups = "drop"
+        )
+      
+      # Per-wetland "All Sites" summary
+      data_wetland <- data %>%
+        group_by(wetland) %>%
+        summarise(
+          site = "All Sites",
+          Year = paste0(min(year), "–", max(year)),
+          `Mean Water Level (cm)` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level (cm)` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level (cm)` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level (cm)` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase (cm)` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease (cm)` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change (cm)` = round(mean(GS_change, na.rm = TRUE), 2),
+          `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
+          `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
+          `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
+          .groups = "drop"
+        )
+      
+      bind_rows(data_site, data_wetland) %>%
+        distinct() %>% 
+        rename(Site = site,
+               Wetland = wetland)
+    }
+  })
+  
+  # reactive table output for selected data from hydrograph
+  output$brush_info <- renderTable({
+    processed_brush_data()
+  })
+  
+  # Output for significance information display
+  output$significance_info <- renderUI({
+    if (show_significance_info()) {
+      sig_results <- significance_results()
+      
+      if (!is.null(sig_results)) {
+        sig_vars <- sig_results %>% 
+          filter(significant) %>% 
+          pull(variable)
+        
+        if (length(sig_vars) > 0) {
+          # Map variable names to display names
+          var_display_names <- c(
+            "WL_mean" = "Mean Water Level",
+            "WL_sd" = "SD Water Level", 
+            "WL_min" = "Minimum Water Level",
+            "WL_max" = "Maximum Water Level",
+            "max_inc" = "Maximum Hourly Increase",
+            "max_dec" = "Maximum Hourly Decrease",
+            "GS_change" = "Growing Season Change",
+            "prop_over_0cm" = "GS % Surface Water",
+            "prop_bet_0_neg30cm" = "GS % Within 30cm",
+            "prop_under_neg30cm" = "GS % Over 30cm Deep"
+          )
+          
+          sig_display_names <- var_display_names[sig_vars]
+          sig_display_names <- sig_display_names[!is.na(sig_display_names)]
+          
+          div(class = "significance-info",
+              h5(icon("exclamation-triangle"), " Statistical Significance", 
+                 style = "color: #856404; margin-bottom: 10px;"),
+              p("Highlighted variables show significant differences (p < 0.05) between Great Meadow and Gilmore Meadow wetlands:", 
+                style = "margin-bottom: 8px; font-size: 0.9rem;"),
+              tags$ul(
+                lapply(sig_display_names, function(name) {
+                  tags$li(name, style = "font-size: 0.85rem; color: #856404;")
+                })
+              ),
+              p("Statistical tests compare averages across all selected years and sites within each wetland.", 
+                style = "margin-top: 5px; margin-bottom: 10px; font-size: 0.8rem; font-style: italic; color: #6c757d;")
+          )
+        }
+      }
+    }
+  })
+  
+  # reactive table output for WL stats with significance highlighting
+  output$wl_stats <- DT::renderDataTable({
+    data <- filtered_stats()
+    
+    dt <- datatable(
+      data,
+      options = list(pageLength = 10, scrollX = TRUE)
+    ) %>%
+      formatStyle(
+        'Site',
+        target = 'cell',
+        fontWeight = styleEqual("All Sites", "bold")
+      )
+    
+    # Add significance highlighting only when appropriate
+    if (show_significance_info()) {
+      sig_results <- significance_results()
+      
+      if (!is.null(sig_results)) {
+        # Map variable names to column names in the table
+        var_mapping <- c(
+          "WL_mean" = "Mean Water Level (cm)",
+          "WL_sd" = "SD Water Level (cm)", 
+          "WL_min" = "Minimum Water Level (cm)",
+          "WL_max" = "Maximum Water Level (cm)",
+          "max_inc" = "Maximum Hourly Increase (cm)",
+          "max_dec" = "Maximum Hourly Decrease (cm)",
+          "GS_change" = "Growing Season Change (cm)",
+          "prop_over_0cm" = "GS % Surface Water",
+          "prop_bet_0_neg30cm" = "GS % Within 30cm",
+          "prop_under_neg30cm" = "GS % Over 30cm Deep"
+        )
+        
+        # Apply highlighting for significant variables
+        for (var_name in names(var_mapping)) {
+          col_name <- var_mapping[var_name]
+          sig_row <- sig_results[sig_results$variable == var_name, ]
+          
+          if (nrow(sig_row) > 0 && sig_row$significant) {
+            dt <- dt %>%
+              formatStyle(
+                col_name,
+                valueColumns = "Site",
+                backgroundColor = styleEqual("All Sites", "#fff3cd"),
+                fontWeight = styleEqual("All Sites", "bold")
+              )
+          }
+        }
+      }
+    }
+    
+    dt
+  })
+  
+  # Download handler for brushed data
+  output$download_brush <- downloadHandler(
+    filename = function() {
+      paste("hydrograph_selected_data_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      write.csv(processed_brush_data(), file, row.names = FALSE)
+    }
+  )
+  
+  # Download handler for water level stats
+  output$download_stats <- downloadHandler(
+    filename = function() {
+      if (input$time_summary == "multi") {
+        paste("wetland_averaged_stats_", Sys.Date(), ".csv", sep = "")
+      } else {
+        paste("site_stats_", Sys.Date(), ".csv", sep = "")
+      }
+    },
+    content = function(file) {
+      write.csv(filtered_stats(), file, row.names = FALSE)
+    }
+  )
+  
+}
+
+# Run app
+shinyApp(ui, server)
+
+
+
+
+
+
+
+
+
+
+
+
+
+library(shiny)
+library(tidyverse)
+library(lubridate)
+library(patchwork)
+library(shinyWidgets)
+library(DT)
+library(bslib)
+
+# Read & prepare processed data
+gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250715.csv") %>%
+  rename(Date = date, Year = year, precip_cm = precip.cm) %>%
+  mutate(Date = as.Date(Date),
+         timestamp = as_datetime(timestamp),
+         site = paste("Great Meadow", plot.num),
+         water.depth = case_when(
+           Year == 2016 & doy_h == 159.12 & plot.num == 3 & water.depth < -120 ~ NA_real_,
+           Year == 2017 & doy_h == 215.02 & plot.num == 6 & water.depth < -115 ~ NA_real_,
+           Year == 2021 & plot.num == 3 & doy == 224 & water.depth > 400 ~ NA_real_,
+           Year == 2021 & plot.num == 3 & doy == 225 & water.depth > 400 ~ NA_real_,
+           TRUE ~ water.depth
+         )) %>%
+  mutate(siteyear = paste(site, Year, sep = "_"))
+
+gl <- read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv") %>%
+  rename(water.depth = GILM_WL) %>%
+  mutate(
+    site = "Gilmore Meadow",
+    
+    # Try to parse full datetime, fallback to date only + midnight
+    timestamp_parsed = mdy_hm(timestamp),
+    timestamp_parsed = if_else(
+      is.na(timestamp_parsed),
+      mdy(timestamp),
+      timestamp_parsed
+    ),
+    timestamp_parsed = as.POSIXct(timestamp_parsed),
+    timestamp = timestamp_parsed,
+    
+    # Standardize Date column too
+    Date = mdy(Date)
+  ) %>%
+  select(timestamp, 
+         Date,
+         doy,
+         Year,
+         precip_cm,
+         water.depth,
+         lag.precip,
+         hr,
+         doy_h,
+         site)
+
+all_data <- bind_rows(gm, gl) %>% 
+  filter(Year >= 2016 & Year <= 2023) %>% 
+  select(timestamp, 
+         date = Date, 
+         year = Year, 
+         doy, 
+         hr, 
+         doy_h,
+         precip_cm,
+         lag_precip = lag.precip,
+         water_depth = water.depth,
+         site)
+
+wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>% 
+  select(year,
+         stat, 
+         `Gilmore Meadow` = gilmore.meadow, 
+         `Great Meadow 1` = great.meadow.1, 
+         `Great Meadow 2` = great.meadow.2, 
+         `Great Meadow 3` = great.meadow.3, 
+         `Great Meadow 4` = great.meadow.4, 
+         `Great Meadow 5` = great.meadow.5, 
+         `Great Meadow 6` = great.meadow.6) %>% 
+  pivot_longer(cols = -c(year, stat), names_to = "site", values_to = "value") %>% 
+  pivot_wider(names_from = stat, values_from = value) %>%
+  arrange(site, year) %>% 
+  mutate(
+    wetland = case_when(
+      grepl("Great Meadow", site, ignore.case = TRUE) ~ "Great Meadow",
+      grepl("Gilmore Meadow", site, ignore.case = TRUE) ~ "Gilmore Meadow",
+      TRUE ~ "Unknown"
+    )
+  )
+
+
+# Function to calculate significance tests between wetlands
+calculate_wetland_significance <- function(data, selected_years, selected_sites, alpha = 0.05) {
+  # Filter data for selected years and sites
+  filtered_data <- data %>%
+    filter(year %in% selected_years, site %in% selected_sites) %>%
+    mutate(site_group = ifelse(grepl("Great Meadow", site), "Great Meadow", site))
+  
+  # Check if we have both wetlands represented in the selected sites
+  wetlands_present <- unique(filtered_data$site_group)
+  
+  # Only run tests if both wetlands are present
+  if (length(wetlands_present) < 2 || !all(c("Great Meadow", "Gilmore Meadow") %in% wetlands_present)) {
+    return(NULL)  # Return NULL if we can't compare between wetlands
+  }
+  
+  # Get all numeric stat columns
+  stat_cols <- filtered_data %>% select(where(is.numeric), -year) %>% names()
+  
+  # Run t-tests for each variable and store results
+  t_test_results <- map_dfr(stat_cols, function(var) {
+    formula <- as.formula(paste(var, "~ site_group"))
+    tryCatch({
+      test <- t.test(formula, data = filtered_data)
+      data.frame(
+        variable = var,
+        p_value = test$p.value,
+        significant = test$p.value < alpha,
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      data.frame(
+        variable = var,
+        p_value = NA,
+        significant = FALSE,
+        stringsAsFactors = FALSE
+      )
+    })
+  })
+  
+  return(t_test_results)
+}
+
+
+# UI 
+ui <- page_fluid(
+  theme = bs_theme(
+    version = 5,
+    bootswatch = "flatly",
+    primary = "#1B365D",
+    secondary = "#4C6D9A",    
+    success = "#2E86C1",
+    info = "#3498db",
+    warning = "#f39c12",
+    danger = "#e74c3c",
+    base_font = font_google("Open Sans"),
+    heading_font = font_google("Open Sans", wght = c(400, 700))
+  ),
+  
+  # Custom CSS for additional styling
+  tags$head(
+    tags$style(HTML("
+      .content-section {
+        margin: 30px 0;
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border: 2px solid #1B365D;
+      }
+      
+      .section-title {
+        color: #1B365D;
+        font-weight: 600;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #4C6D9A;
+      }
+      
+      .sidebar-custom {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border: 1px solid #dee2e6;
+      }
+      
+      .main-title {
+        background: linear-gradient(135deg, #1B365D 0%, #4C6D9A 100%);
+        color: white;
+        padding: 30px;
+        margin: -15px -15px 30px -15px;
+        text-align: center;
+        border-radius: 0 0 20px 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      
+      .brush-info-section {
+        background: linear-gradient(135deg, #e8f4f8 0%, #f0f8ff 100%);
+        border-radius: 12px;
+        padding: 20px;
+        margin: 20px 0;
+        border: 1px solid #4C6D9A;
+      }
+      
+      .stats-main {
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+      }
+      
+      .dataTables_wrapper {
+        font-size: 0.85rem !important;
+      }
+
+      .dataTables_wrapper table {
+        font-size: 0.8rem !important;
+      }
+
+      .dataTables_wrapper .dataTables_info,
+      .dataTables_wrapper .dataTables_paginate {
+        font-size: 0.75rem !important;
+      }
+      
+    "))
+  ),
+  
+  # Main title with gradient background
+  div(class = "main-title",
+      h1("Wetland Hydrograph Visualizer", 
+         style = "margin: 0; font-size: 2rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3)")
+  ),
+  
+  # First section: Hydrographs 
+  div(class = "content-section",
+      layout_sidebar(
+        sidebar = sidebar(
+          class = "sidebar-custom",
+          width = 300,
+          h4("Hydrograph Controls", style = "color: #1B365D; margin-bottom: 20px;"),
+          
+          pickerInput("selected_sites", 
+                      label = div(icon("map-marker"), "Select Site(s):"),
+                      choices = sort(unique(all_data$site)),
+                      selected = c("Great Meadow 1", "Gilmore Meadow"),
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `deselect-all-text` = "Clear all",
+                        `select-all-text` = "Select all",
+                        `none-selected-text` = "Choose site(s)",
+                        `live-search` = TRUE,
+                        style = "btn-outline-primary"
+                      )),
+          
+          div(style = "margin-bottom: 15px;",
+              pickerInput("year", 
+                          label = div(icon("calendar"), "Select Year(s):"),
+                          choices = sort(unique(all_data$year)),
+                          selected = 2023,
+                          multiple = TRUE,
+                          options = list(
+                            `actions-box` = TRUE,
+                            `deselect-all-text` = "Clear all",
+                            `select-all-text` = "Select all",
+                            `none-selected-text` = "Choose year(s)",
+                            `live-search` = TRUE,
+                            style = "btn-outline-primary"
+                          ))),
+          
+          br(),
+          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Use the brush tool to select data points on the hydrograph for a detailed view of the data.", 
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
+          
+          
+          div(style = "margin-top: 10px; text-align: center;",
+              downloadButton("download_plot", "Download Hydrograph", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("image"))),
+          
+          div(style = "margin-top: 10px; text-align: center;",
+              downloadButton("download_brush", "Download Selected Data", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("download")))
+        ),
+        
+        card(
+          full_screen = TRUE,
+          card_header(
+            class = "bg-primary text-white",
+            "Hydrographs by Year"
+          ),
+          plotOutput("hydrograph", height = "600px", 
+                     brush = brushOpts(id = "hydro_brush", fill = "#4C6D9A", opacity = 0.3))
+        )
+      )
+  ),
+  
+  # Selected data points section with improved styling
+  div(class = "brush-info-section",
+      div(class = "row",
+          div(class = "col-12",
+              card(
+                card_header(
+                  class = "bg-success text-white",
+                  "Selected Data from Hydrograph:"
+                ),
+                tableOutput("brush_info")
+              )
+          )
+      )
+  ),
+  
+  # Second section: Water Level Stats with improved styling
+  div(class = "content-section stats-main",
+      layout_sidebar(
+        sidebar = sidebar(
+          class = "sidebar-custom",
+          width = 300,
+          h4("Statistics Controls", style = "color: #1B365D; margin-bottom: 20px;"),
+          
+          pickerInput("stats_site", 
+                      label = div(icon("map-marker"), "Select Site(s):"),
+                      choices = sort(unique(wl_stats$site)),
+                      selected = "Great Meadow 1",
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `deselect-all-text` = "Clear all",
+                        `select-all-text` = "Select all",
+                        `none-selected-text` = "Choose site(s)",
+                        `live-search` = TRUE,
+                        style = "btn-outline-primary"
+                      )),
+          
+          div(style = "margin-bottom: 15px;",
+              pickerInput("stats_year", 
+                          label = div(icon("calendar"), "Select Years:"),
+                          choices = sort(unique(wl_stats$year)),
+                          selected = c(2023, 2022, 2021, 2020),
+                          multiple = TRUE,
+                          options = list(
+                            `actions-box` = TRUE,
+                            `deselect-all-text` = "Clear all",
+                            `select-all-text` = "Select all",
+                            `none-selected-text` = "Choose year(s)",
+                            `live-search` = TRUE,
+                            style = "btn-outline-primary"
+                          ))),
+          
+          div(style = "margin-bottom: 15px;",
+              radioButtons("time_summary", "Summarize Stats:",
+                           choices = c("Each Year" = "year", "Average Across Years" = "multi"),
+                           selected = "year",
+                           inline = TRUE)),
+          
+          br(),
+          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Growing Season statistics calculated from May through October.", 
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
+          
+          div(style = "margin-top: 15px; text-align: center;",
+              downloadButton("download_stats", "Download Table", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("download")))
+        ),
+        
+        card(
+          full_screen = TRUE,
+          card_header(
+            class = "bg-primary text-white",
+            "Growing Season Water Level Statistics"
+          ),
+          
+          div(style = "padding: 10px;",
+              uiOutput("significance_info"),
+              dataTableOutput("wl_stats"))
+        )
+      )
+  )
+)
+
+# Server
+server <- function(input, output, session) {
+  
+  # Reactive data for plotting
+  plot_data <- reactive({
+    req(input$year, input$selected_sites)
+    
+    all_data %>%
+      filter(year %in% input$year, doy > 134, doy < 275) %>%
+      filter(site %in% input$selected_sites)
+  })
+  
+  output$hydrograph <- renderPlot({
+    plot_data_filtered <- plot_data()
+    req(nrow(plot_data_filtered) > 0)
+    
+    # Calculate water level range across all data for consistent precipitation baseline
+    minWL <- min(plot_data_filtered$water_depth, na.rm = TRUE)
+    maxWL <- max(plot_data_filtered$water_depth, na.rm = TRUE)
+    water_range_size <- maxWL - minWL
+    
+    # Use a smaller portion of the range for precipitation
+    precip_height <- water_range_size * 0.15  # 15% of water range
+    precip_scale <- precip_height / max(plot_data_filtered$lag_precip, na.rm = TRUE)
+    
+    # Position precipitation at the bottom
+    precip_baseline <- minWL - (water_range_size * 0.05)  # 5% below minimum
+    
+    # Color palette for sites
+    sites <- unique(plot_data_filtered$site)
+    site_colors <- c(
+      "Great Meadow 1" = "black", "Great Meadow 2" = "chartreuse4", "Great Meadow 3" = "green",
+      "Great Meadow 4" = "darkorange", "Great Meadow 5" = "deeppink2", "Great Meadow 6" = "purple",
+      "Gilmore Meadow" = "darkgray", "Precipitation" = "blue"
+    )
+    
+    # Create the plot
+    ggplot(plot_data_filtered, aes(x = doy_h, y = water_depth)) +
+      # Water level lines by site
+      geom_line(aes(color = site), size = 0.7) +
+      
+      # Precipitation line (scaled by multiplier of 5 and offset by minWL)
+      geom_line(aes(x = doy_h, y = lag_precip * precip_scale + precip_baseline, 
+                    color = "Precipitation"), 
+                size = 0.7) +
+      
+      # Ground level reference
+      geom_hline(yintercept = 0, color = 'brown') +
+      
+      # Facet by year
+      facet_wrap(~ year, ncol = 1, scales = "free_y") +
+      
+      # Colors
+      scale_color_manual(values = site_colors, 
+                         breaks = c(sites, "Precipitation")) +
+      
+      # Axes and labels
+      labs(y = 'Water Level (cm)', x = 'Date') +
+      scale_x_continuous(
+        breaks = c(121, 152, 182, 213, 244, 274),
+        labels = c('May-01', 'Jun-01', 'Jul-01', 'Aug-01', 'Sep-01', 'Oct-01')
+      ) +
+      
+      # Secondary axis for precipitation
+      scale_y_continuous(
+        sec.axis = sec_axis(~ (. - precip_baseline) / precip_scale,
+                            name = 'Hourly Precip. (cm)',
+                            breaks = seq(0, max(plot_data_filtered$lag_precip, na.rm = TRUE), 
+                                         by = 0.5),
+                            labels = function(x) sprintf("%.1f", x))
+      ) +
+      
+      # Theme
+      theme_bw() +
+      theme(
+        plot.title = element_text(hjust = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text.y.right = element_text(color = 'blue'),
+        axis.title.y.right = element_text(color = 'blue'),
+        strip.text = element_text(size = 11),
+        legend.position = "bottom",
+        legend.title = element_blank()
+      )
+  })
+  
+  # Reactive for processed brushed data
+  processed_brush_data <- reactive({
+    req(input$hydro_brush)
+    
+    plot_data_filtered <- plot_data()
+    req(nrow(plot_data_filtered) > 0)
+    
+    selected_data <- brushedPoints(
+      plot_data_filtered,
+      brush = input$hydro_brush,
+      xvar = "doy_h",
+      yvar = "water_depth"
+    ) %>%
+      select(site, year, doy_h, timestamp, water_depth, lag_precip) %>%
+      arrange(year, doy_h) %>%
+      mutate(
+        doy_h = round(doy_h, 2),
+        water_depth = round(water_depth, 2),
+        lag_precip = round(lag_precip, 3),
+        timestamp = format(timestamp, "%Y-%m-%d %H:%M:%S")
+      )
+    
+    if (nrow(selected_data) == 0) {
+      return(data.frame(Message = "No points selected - try brushing over the water level lines"))
+    }
+    
+    # Create the base data with timestamp and precipitation
+    base_data <- selected_data %>%
+      mutate(doy_h_rounded = round(doy_h, 1)) %>%
+      group_by(year, doy_h_rounded) %>%
+      summarise(
+        timestamp = first(timestamp),
+        doy_h_orig = first(doy_h),
+        lag_precip = first(lag_precip),
+        .groups = 'drop'
+      )
+    
+    # Create water depth data for each site, taking the mean of duplicates
+    water_depth_data <- selected_data %>%
+      mutate(doy_h_rounded = round(doy_h, 1)) %>%
+      group_by(year, doy_h_rounded, site) %>%
+      summarise(water_depth = mean(water_depth, na.rm = TRUE), .groups = 'drop') %>%
+      pivot_wider(names_from = site, values_from = water_depth, names_prefix = "")
+    
+    # Join the data together
+    result_data <- base_data %>%
+      left_join(water_depth_data, by = c("year", "doy_h_rounded")) %>%
+      select(-doy_h_rounded) %>%
+      rename(
+        `Year` = year, 
+        `Timestamp` = timestamp,
+        `Day of Year` = doy_h_orig,
+        `Precipitation (cm)` = lag_precip
+      )
+    
+    # Add " Water Depth (cm)" suffix to site columns
+    site_columns <- intersect(names(result_data), input$selected_sites)
+    if (length(site_columns) > 0) {
+      result_data <- result_data %>%
+        rename_with(~ paste(.x, "Water Depth (cm)"), .cols = all_of(site_columns))
+    }
+    
+    result_data %>% arrange(Year, `Day of Year`)
+  })
+  
+  # Reactive for significance testing results - now checks if both wetlands are selected
+  significance_results <- reactive({
+    req(input$stats_year, input$stats_site)
+    
+    # Check if both wetlands are represented in selected sites
+    selected_wetlands <- wl_stats %>%
+      filter(site %in% input$stats_site) %>%
+      pull(wetland) %>%
+      unique()
+    
+    # Only calculate significance if both wetlands are represented
+    if (length(selected_wetlands) >= 2 && all(c("Great Meadow", "Gilmore Meadow") %in% selected_wetlands)) {
+      calculate_wetland_significance(wl_stats, input$stats_year, input$stats_site, alpha = 0.05)
+    } else {
+      NULL
+    }
+  })
+  
+  # Reactive to determine if we should show significance info
+  show_significance_info <- reactive({
+    req(input$stats_site, input$time_summary)
+    
+    if (input$time_summary != "multi") return(FALSE)
+    
+    selected_wetlands <- wl_stats %>%
+      filter(site %in% input$stats_site) %>%
+      pull(wetland) %>%
+      unique()
+    
+    return(length(selected_wetlands) >= 2 && all(c("Great Meadow", "Gilmore Meadow") %in% selected_wetlands))
+  })
+  
+  
+  # setting up average WL stats and calculating stats output tables
+  filtered_stats <- reactive({
+    req(input$stats_site, input$stats_year, input$time_summary)
+    
+    data <- wl_stats %>%
+      filter(site %in% input$stats_site, year %in% input$stats_year)
+    
+    if (input$time_summary == "year") {
+      # ---- Option 1: Per-Year Summary ----
+      data %>%
+        mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
+        select(
+          Year = year,
+          Site = site,
+          `Mean Water Level (cm)` = WL_mean,
+          `SD Water Level (cm)` = WL_sd,
+          `Minimum Water Level (cm)` = WL_min,
+          `Maximum Water Level (cm)` = WL_max,
+          `Maximum Hourly Increase (cm)` = max_inc,
+          `Maximum Hourly Decrease (cm)` = max_dec,
+          `Growing Season Change (cm)` = GS_change,
+          `GS % Surface Water` = prop_over_0cm,
+          `GS % Within 30cm` = prop_bet_0_neg30cm,
+          `GS % Over 30cm Deep` = prop_under_neg30cm
+        )
+    } else {
+      # ---- Option 2: Average Across Years ----
+      # Per-site summary
+      data_site <- data %>%
+        group_by(site, wetland) %>%
+        summarise(
+          Year = paste0(min(year), "–", max(year)),
+          `Mean Water Level (cm)` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level (cm)` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level (cm)` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level (cm)` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase (cm)` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease (cm)` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change (cm)` = round(mean(GS_change, na.rm = TRUE), 2),
+          `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
+          `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
+          `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
+          .groups = "drop"
+        )
+      
+      # Per-wetland "All Sites" summary
+      data_wetland <- data %>%
+        group_by(wetland) %>%
+        summarise(
+          site = "All Sites",
+          Year = paste0(min(year), "–", max(year)),
+          `Mean Water Level (cm)` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level (cm)` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level (cm)` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level (cm)` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase (cm)` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease (cm)` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change (cm)` = round(mean(GS_change, na.rm = TRUE), 2),
+          `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
+          `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
+          `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
+          .groups = "drop"
+        )
+      
+      bind_rows(data_site, data_wetland) %>%
+        distinct() %>% 
+        rename(Site = site,
+               Wetland = wetland)
+    }
+  })
+  
+  # reactive table output for selected data from hydrograph
+  output$brush_info <- renderTable({
+    processed_brush_data()
+  })
+  
+  # Output for significance information display
+  output$significance_info <- renderUI({
+    if (show_significance_info()) {
+      sig_results <- significance_results()
+      
+      if (!is.null(sig_results)) {
+        sig_vars <- sig_results %>% 
+          filter(significant) %>% 
+          pull(variable)
+        
+        if (length(sig_vars) > 0) {
+          # Map variable names to display names
+          var_display_names <- c(
+            "WL_mean" = "Mean Water Level",
+            "WL_sd" = "SD Water Level", 
+            "WL_min" = "Minimum Water Level",
+            "WL_max" = "Maximum Water Level",
+            "max_inc" = "Maximum Hourly Increase",
+            "max_dec" = "Maximum Hourly Decrease",
+            "GS_change" = "Growing Season Change",
+            "prop_over_0cm" = "GS % Surface Water",
+            "prop_bet_0_neg30cm" = "GS % Within 30cm",
+            "prop_under_neg30cm" = "GS % Over 30cm Deep"
+          )
+          
+          sig_display_names <- var_display_names[sig_vars]
+          sig_display_names <- sig_display_names[!is.na(sig_display_names)]
+          
+          div(class = "significance-info",
+              h5(icon("exclamation-triangle"), " Statistical Significance", 
+                 style = "color: #856404; margin-bottom: 10px;"),
+              p("Highlighted variables show significant differences (p < 0.05) between Great Meadow and Gilmore Meadow wetlands:", 
+                style = "margin-bottom: 8px; font-size: 0.9rem;"),
+              tags$ul(
+                lapply(sig_display_names, function(name) {
+                  tags$li(name, style = "font-size: 0.85rem; color: #856404;")
+                })
+              ),
+              p("Statistical tests compare averages across all selected years and sites within each wetland.", 
+                style = "margin-top: 5px; margin-bottom: 10px; font-size: 0.8rem; font-style: italic; color: #6c757d;")
+          )
+        }
+      }
+    }
+  })
+  
+  # reactive table output for WL stats with significance highlighting
+  output$wl_stats <- DT::renderDataTable({
+    data <- filtered_stats()
+    
+    dt <- datatable(
+      data,
+      options = list(pageLength = 10, scrollX = TRUE)
+    ) %>%
+      formatStyle(
+        'Site',
+        target = 'cell',
+        fontWeight = styleEqual("All Sites", "bold")
+      )
+    
+    # Add significance highlighting only when appropriate
+    if (show_significance_info()) {
+      sig_results <- significance_results()
+      
+      if (!is.null(sig_results)) {
+        # Map variable names to column names in the table
+        var_mapping <- c(
+          "WL_mean" = "Mean Water Level (cm)",
+          "WL_sd" = "SD Water Level (cm)", 
+          "WL_min" = "Minimum Water Level (cm)",
+          "WL_max" = "Maximum Water Level (cm)",
+          "max_inc" = "Maximum Hourly Increase (cm)",
+          "max_dec" = "Maximum Hourly Decrease (cm)",
+          "GS_change" = "Growing Season Change (cm)",
+          "prop_over_0cm" = "GS % Surface Water",
+          "prop_bet_0_neg30cm" = "GS % Within 30cm",
+          "prop_under_neg30cm" = "GS % Over 30cm Deep"
+        )
+        
+        # Apply highlighting for significant variables
+        for (var_name in names(var_mapping)) {
+          col_name <- var_mapping[var_name]
+          sig_row <- sig_results[sig_results$variable == var_name, ]
+          
+          if (nrow(sig_row) > 0 && sig_row$significant) {
+            dt <- dt %>%
+              formatStyle(
+                col_name,
+                valueColumns = "Site",
+                backgroundColor = styleEqual("All Sites", "#fff3cd"),
+                fontWeight = styleEqual("All Sites", "bold")
+              )
+          }
+        }
+      }
+    }
+    
+    dt
+  })
+  
+  # Download handler for brushed data
+  output$download_brush <- downloadHandler(
+    filename = function() {
+      paste("hydrograph_selected_data_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      write.csv(processed_brush_data(), file, row.names = FALSE)
+    }
+  )
+  
+  # Download handler for water level stats
+  output$download_stats <- downloadHandler(
+    filename = function() {
+      if (input$time_summary == "multi") {
+        paste("wetland_averaged_stats_", Sys.Date(), ".csv", sep = "")
+      } else {
+        paste("site_stats_", Sys.Date(), ".csv", sep = "")
+      }
+    },
+    content = function(file) {
+      write.csv(filtered_stats(), file, row.names = FALSE)
+    }
+  )
+  
+  # Download handler for hydrograph plot
+  output$download_plot <- downloadHandler(
+    filename = function() {
+      sites_label <- paste(input$selected_sites, collapse = "_")
+      years_label <- paste(input$year, collapse = "_")
+      paste0("hydrograph_", sites_label, "_", years_label, "_", Sys.Date(), ".png")
+    },
+    content = function(file) {
+      # Recreate the plot
+      plot_data_filtered <- plot_data()
+      req(nrow(plot_data_filtered) > 0)
+      
+      # Calculate minimum water level across all data for consistent precipitation baseline
+      minWL <- min(plot_data_filtered$water_depth, na.rm = TRUE)
+      
+      # Create color palette for sites
+      sites <- unique(plot_data_filtered$site)
+      site_colors <- c(
+        "Great Meadow 1" = "black", "Great Meadow 2" = "red", "Great Meadow 3" = "green",
+        "Great Meadow 4" = "orange", "Great Meadow 5" = "purple", "Great Meadow 6" = "brown",
+        "Gilmore Meadow" = "darkgray", "Precipitation" = "blue"
+      )
+      
+      # Create the plot
+      p <- ggplot(plot_data_filtered, aes(x = doy_h, y = water_depth)) +
+        # Water level lines by site
+        geom_line(aes(color = site), size = 0.7) +
+        
+        # Precipitation line (scaled by multiplier of 5 and offset by minWL)
+        geom_line(aes(x = doy_h, y = lag_precip * 5 + minWL, color = "Precipitation"), 
+                  size = 0.7) +
+        
+        # Ground level reference
+        geom_hline(yintercept = 0, color = 'brown') +
+        
+        # Facet by year
+        facet_wrap(~ year, ncol = 1, scales = "free_y") +
+        
+        # Colors
+        scale_color_manual(values = site_colors, 
+                           breaks = c(sites, "Precipitation")) +
+        
+        # Axes and labels
+        labs(y = 'Water Level (cm)', x = 'Date') +
+        scale_x_continuous(
+          breaks = c(121, 152, 182, 213, 244, 274),
+          labels = c('May-01', 'Jun-01', 'Jul-01', 'Aug-01', 'Sep-01', 'Oct-01')
+        ) +
+        
+        # Secondary axis for precipitation
+        scale_y_continuous(
+          sec.axis = sec_axis(~ .,
+                              breaks = c(minWL, minWL + 10),
+                              name = 'Hourly Precip. (cm)',
+                              labels = c('0', '2'))
+        ) +
+        
+        # Theme
+        theme_bw() +
+        theme(
+          plot.title = element_text(hjust = 0.5),
+          panel.grid.minor = element_blank(),
+          panel.grid.major = element_blank(),
+          axis.text.y.right = element_text(color = 'blue'),
+          axis.title.y.right = element_text(color = 'blue'),
+          strip.text = element_text(size = 11),
+          legend.position = "bottom",
+          legend.title = element_blank()
+        )
+      
+      # Save the plot
+      ggsave(file, plot = p, width = 12, height = 8, dpi = 300, bg = "white")
+    }
+  )
+  
+}
+
+# Run app
+shinyApp(ui, server)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+####----------------------------------------------------------------------------
+
+
+
+library(shiny)
+library(tidyverse)
+library(lubridate)
+library(patchwork)
+library(shinyWidgets)
+library(DT)
+library(bslib)
+
+# Read & prepare processed data
+gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250715.csv") %>%
+  rename(Date = date, Year = year, precip_cm = precip.cm) %>%
+  mutate(Date = as.Date(Date),
+         timestamp = as_datetime(timestamp),
+         site = paste("Great Meadow", plot.num),
+         water.depth = case_when(
+           Year == 2016 & doy_h == 159.12 & plot.num == 3 & water.depth < -120 ~ NA_real_,
+           Year == 2017 & doy_h == 215.02 & plot.num == 6 & water.depth < -115 ~ NA_real_,
+           Year == 2021 & plot.num == 3 & doy == 224 & water.depth > 400 ~ NA_real_,
+           Year == 2021 & plot.num == 3 & doy == 225 & water.depth > 400 ~ NA_real_,
+           TRUE ~ water.depth
+         )) %>%
+  mutate(siteyear = paste(site, Year, sep = "_"))
+
+gl <- read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv") %>%
+  rename(water.depth = GILM_WL) %>%
+  mutate(
+    site = "Gilmore Meadow",
+    
+    # Try to parse full datetime, fallback to date only + midnight
+    timestamp_parsed = mdy_hm(timestamp),
+    timestamp_parsed = if_else(
+      is.na(timestamp_parsed),
+      mdy(timestamp),
+      timestamp_parsed
+    ),
+    timestamp_parsed = as.POSIXct(timestamp_parsed),
+    timestamp = timestamp_parsed,
+    
+    # Standardize Date column too
+    Date = mdy(Date)
+  ) %>%
+  select(timestamp, 
+         Date,
+         doy,
+         Year,
+         precip_cm,
+         water.depth,
+         lag.precip,
+         hr,
+         doy_h,
+         site)
+
+all_data <- bind_rows(gm, gl) %>% 
+  filter(Year >= 2016 & Year <= 2023) %>% 
+  select(timestamp, 
+         date = Date, 
+         year = Year, 
+         doy, 
+         hr, 
+         doy_h,
+         precip_cm,
+         lag_precip = lag.precip,
+         water_depth = water.depth,
+         site)
+
+wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>% 
+  select(year,
+         stat, 
+         `Gilmore Meadow` = gilmore.meadow, 
+         `Great Meadow 1` = great.meadow.1, 
+         `Great Meadow 2` = great.meadow.2, 
+         `Great Meadow 3` = great.meadow.3, 
+         `Great Meadow 4` = great.meadow.4, 
+         `Great Meadow 5` = great.meadow.5, 
+         `Great Meadow 6` = great.meadow.6) %>% 
+  pivot_longer(cols = -c(year, stat), names_to = "site", values_to = "value") %>% 
+  pivot_wider(names_from = stat, values_from = value) %>%
+  arrange(site, year) %>% 
+  mutate(
+    wetland = case_when(
+      grepl("Great Meadow", site, ignore.case = TRUE) ~ "Great Meadow",
+      grepl("Gilmore Meadow", site, ignore.case = TRUE) ~ "Gilmore Meadow",
+      TRUE ~ "Unknown"
+    )
+  )
+
+
+# Function to calculate significance tests between wetlands
+calculate_wetland_significance <- function(data, selected_years, selected_sites, alpha = 0.05) {
+  # Filter data for selected years and sites
+  filtered_data <- data %>%
+    filter(year %in% selected_years, site %in% selected_sites) %>%
+    mutate(site_group = ifelse(grepl("Great Meadow", site), "Great Meadow", site))
+  
+  # Check if we have both wetlands represented in the selected sites
+  wetlands_present <- unique(filtered_data$site_group)
+  
+  # Only run tests if both wetlands are present
+  if (length(wetlands_present) < 2 || !all(c("Great Meadow", "Gilmore Meadow") %in% wetlands_present)) {
+    return(NULL)  # Return NULL if we can't compare between wetlands
+  }
+  
+  # Get all numeric stat columns
+  stat_cols <- filtered_data %>% select(where(is.numeric), -year) %>% names()
+  
+  # Run t-tests for each variable and store results
+  t_test_results <- map_dfr(stat_cols, function(var) {
+    formula <- as.formula(paste(var, "~ site_group"))
+    tryCatch({
+      test <- t.test(formula, data = filtered_data)
+      data.frame(
+        variable = var,
+        p_value = test$p.value,
+        significant = test$p.value < alpha,
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      data.frame(
+        variable = var,
+        p_value = NA,
+        significant = FALSE,
+        stringsAsFactors = FALSE
+      )
+    })
+  })
+  
+  return(t_test_results)
+}
+
+
+# UI 
+ui <- page_fluid(
+  theme = bs_theme(
+    version = 5,
+    bootswatch = "flatly",
+    primary = "#1B365D",
+    secondary = "#4C6D9A",    
+    success = "#2E86C1",
+    info = "#3498db",
+    warning = "#f39c12",
+    danger = "#e74c3c",
+    base_font = font_google("Open Sans"),
+    heading_font = font_google("Open Sans", wght = c(400, 700))
+  ),
+  
+  # Custom CSS for additional styling
+  tags$head(
+    tags$style(HTML("
+      .content-section {
+        margin: 30px 0;
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border: 2px solid #1B365D;
+      }
+      
+      .section-title {
+        color: #1B365D;
+        font-weight: 600;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #4C6D9A;
+      }
+      
+      .sidebar-custom {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border: 1px solid #dee2e6;
+      }
+      
+      .main-title {
+        background: linear-gradient(135deg, #1B365D 0%, #4C6D9A 100%);
+        color: white;
+        padding: 30px;
+        margin: -15px -15px 30px -15px;
+        text-align: center;
+        border-radius: 0 0 20px 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      
+      .brush-info-section {
+        background: linear-gradient(135deg, #e8f4f8 0%, #f0f8ff 100%);
+        border-radius: 12px;
+        padding: 20px;
+        margin: 20px 0;
+        border: 1px solid #4C6D9A;
+      }
+      
+      .stats-main {
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+      }
+      
+      .dataTables_wrapper {
+        font-size: 0.85rem !important;
+      }
+
+      .dataTables_wrapper table {
+        font-size: 0.8rem !important;
+      }
+
+      .dataTables_wrapper .dataTables_info,
+      .dataTables_wrapper .dataTables_paginate {
+        font-size: 0.75rem !important;
+      }
+      
+    "))
+  ),
+  
+  # Main title with gradient background
+  div(class = "main-title",
+      h1("Wetland Hydrograph Visualizer", 
+         style = "margin: 0; font-size: 2rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3)")
+  ),
+  
+  # First section: Hydrographs 
+  div(class = "content-section",
+      layout_sidebar(
+        sidebar = sidebar(
+          class = "sidebar-custom",
+          width = 300,
+          h4("Hydrograph Controls", style = "color: #1B365D; margin-bottom: 20px;"),
+          
+          pickerInput("selected_sites", 
+                      label = div(icon("map-marker"), "Select Site(s):"),
+                      choices = sort(unique(all_data$site)),
+                      selected = c("Great Meadow 1", "Gilmore Meadow"),
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `deselect-all-text` = "Clear all",
+                        `select-all-text` = "Select all",
+                        `none-selected-text` = "Choose site(s)",
+                        `live-search` = TRUE,
+                        style = "btn-outline-primary"
+                      )),
+          
+          div(style = "margin-bottom: 15px;",
+              pickerInput("year", 
+                          label = div(icon("calendar"), "Select Year(s):"),
+                          choices = sort(unique(all_data$year)),
+                          selected = 2023,
+                          multiple = TRUE,
+                          options = list(
+                            `actions-box` = TRUE,
+                            `deselect-all-text` = "Clear all",
+                            `select-all-text` = "Select all",
+                            `none-selected-text` = "Choose year(s)",
+                            `live-search` = TRUE,
+                            style = "btn-outline-primary"
+                          ))),
+          
+          br(),
+          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Use the brush tool to select data points on the hydrograph for a detailed view of the data.", 
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
+          
+          div(style = "margin-top: 15px; text-align: center;",
+              downloadButton("download_brush", "Download Selected Data", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("download")))
+        ),
+        
+        card(
+          full_screen = TRUE,
+          card_header(
+            class = "bg-primary text-white",
+            "Hydrographs by Year"
+          ),
+          plotOutput("hydrograph", height = "600px", 
+                     brush = brushOpts(id = "hydro_brush", fill = "#4C6D9A", opacity = 0.3))
+        )
+      )
+  ),
+  
+  # Selected data points section with improved styling
+  div(class = "brush-info-section",
+      div(class = "row",
+          div(class = "col-12",
+              card(
+                card_header(
+                  class = "bg-success text-white",
+                  "Selected Data from Hydrograph:"
+                ),
+                tableOutput("brush_info")
+              )
+          )
+      )
+  ),
+  
+  # Second section: Water Level Stats with improved styling
+  div(class = "content-section stats-main",
+      layout_sidebar(
+        sidebar = sidebar(
+          class = "sidebar-custom",
+          width = 300,
+          h4("Statistics Controls", style = "color: #1B365D; margin-bottom: 20px;"),
+          
+          pickerInput("stats_site", 
+                      label = div(icon("map-marker"), "Select Site(s):"),
+                      choices = sort(unique(wl_stats$site)),
+                      selected = "Great Meadow 1",
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `deselect-all-text` = "Clear all",
+                        `select-all-text` = "Select all",
+                        `none-selected-text` = "Choose site(s)",
+                        `live-search` = TRUE,
+                        style = "btn-outline-primary"
+                      )),
+          
+          div(style = "margin-bottom: 15px;",
+              pickerInput("stats_year", 
+                          label = div(icon("calendar"), "Select Years:"),
+                          choices = sort(unique(wl_stats$year)),
+                          selected = c(2023, 2022, 2021, 2020),
+                          multiple = TRUE,
+                          options = list(
+                            `actions-box` = TRUE,
+                            `deselect-all-text` = "Clear all",
+                            `select-all-text` = "Select all",
+                            `none-selected-text` = "Choose year(s)",
+                            `live-search` = TRUE,
+                            style = "btn-outline-primary"
+                          ))),
+          
+          div(style = "margin-bottom: 15px;",
+              radioButtons("time_summary", "Summarize Stats:",
+                           choices = c("Each Year" = "year", "Average Across Years" = "multi"),
+                           selected = "year",
+                           inline = TRUE)),
+          
+          br(),
+          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Growing Season statistics calculated from May through October.", 
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
+          
+          div(style = "margin-top: 15px; text-align: center;",
+              downloadButton("download_stats", "Download Table", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("download")))
+        ),
+        
+        card(
+          full_screen = TRUE,
+          card_header(
+            class = "bg-primary text-white",
+            "Growing Season Water Level Statistics"
+          ),
+          
+          div(style = "padding: 10px;",
+              uiOutput("significance_info"),
+              dataTableOutput("wl_stats"))
+        )
+      )
+  )
+)
+
+# Server
+server <- function(input, output, session) {
+  
+  # Reactive data for plotting
+  plot_data <- reactive({
+    req(input$year, input$selected_sites)
+    
+    all_data %>%
+      filter(year %in% input$year, doy > 134, doy < 275) %>%
+      filter(site %in% input$selected_sites)
+  })
+  
+  output$hydrograph <- renderPlot({
+    plot_data_filtered <- plot_data()
+    req(nrow(plot_data_filtered) > 0)
+    
+    # Calculate dynamic scaling for precipitation
+    precip_range <- range(plot_data_filtered$lag_precip, na.rm = TRUE)
+    water_range <- range(plot_data_filtered$water_depth, na.rm = TRUE)
+    
+    # Scale precipitation to use about 20% of the water level range
+    precip_scale_factor <- diff(water_range) * 0.2 / diff(precip_range)
+    precip_offset <- min(water_range, na.rm = TRUE)
+    
+    # Color palette for sites
+    sites <- unique(plot_data_filtered$site)
+    site_colors <- c(
+      "Great Meadow 1" = "black", "Great Meadow 2" = "chartreuse4", "Great Meadow 3" = "green",
+      "Great Meadow 4" = "darkorange", "Great Meadow 5" = "deeppink2", "Great Meadow 6" = "purple",
+      "Gilmore Meadow" = "darkgray", "Precipitation" = "blue"
+    )
+    
+    # Create the plot
+    ggplot(plot_data_filtered, aes(x = doy_h, y = water_depth)) +
+      # Water level lines by site
+      geom_line(aes(color = site), size = 0.7) +
+      
+      # Precipitation line (dynamically scaled)
+      geom_line(aes(x = doy_h, y = lag_precip * precip_scale_factor + precip_offset, 
+                    color = "Precipitation"), 
+                size = 0.7) +
+      
+      # Ground level reference
+      geom_hline(yintercept = 0, color = 'brown') +
+      
+      # Facet by year
+      facet_wrap(~ year, ncol = 1, scales = "free_y") +
+      
+      # Colors
+      scale_color_manual(values = site_colors, 
+                         breaks = c(sites, "Precipitation")) +
+      
+      # Axes and labels
+      labs(y = 'Water Level (cm)', x = 'Date') +
+      scale_x_continuous(
+        breaks = c(121, 152, 182, 213, 244, 274),
+        labels = c('May-01', 'Jun-01', 'Jul-01', 'Aug-01', 'Sep-01', 'Oct-01')
+      ) +
+      
+      # Dynamic secondary axis for precipitation
+      scale_y_continuous(
+        sec.axis = sec_axis(~ (. - precip_offset) / precip_scale_factor,
+                            name = 'Hourly Precip. (cm)',
+                            labels = function(x) sprintf("%.1f", x))
+      ) +
+      
+      # Theme
+      theme_bw() +
+      theme(
+        plot.title = element_text(hjust = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text.y.right = element_text(color = 'blue'),
+        axis.title.y.right = element_text(color = 'blue'),
+        strip.text = element_text(size = 11),
+        legend.position = "bottom",
+        legend.title = element_blank()
+      )
+  })
+  
+  # Reactive for processed brushed data
+  processed_brush_data <- reactive({
+    req(input$hydro_brush)
+    
+    plot_data_filtered <- plot_data()
+    req(nrow(plot_data_filtered) > 0)
+    
+    selected_data <- brushedPoints(
+      plot_data_filtered,
+      brush = input$hydro_brush,
+      xvar = "doy_h",
+      yvar = "water_depth"
+    ) %>%
+      select(site, year, doy_h, timestamp, water_depth, lag_precip) %>%
+      arrange(year, doy_h) %>%
+      mutate(
+        doy_h = round(doy_h, 2),
+        water_depth = round(water_depth, 2),
+        lag_precip = round(lag_precip, 3),
+        timestamp = format(timestamp, "%Y-%m-%d %H:%M:%S")
+      )
+    
+    if (nrow(selected_data) == 0) {
+      return(data.frame(Message = "No points selected - try brushing over the water level lines"))
+    }
+    
+    # Create the base data with timestamp and precipitation
+    base_data <- selected_data %>%
+      mutate(doy_h_rounded = round(doy_h, 1)) %>%
+      group_by(year, doy_h_rounded) %>%
+      summarise(
+        timestamp = first(timestamp),
+        doy_h_orig = first(doy_h),
+        lag_precip = first(lag_precip),
+        .groups = 'drop'
+      )
+    
+    # Create water depth data for each site, taking the mean of duplicates
+    water_depth_data <- selected_data %>%
+      mutate(doy_h_rounded = round(doy_h, 1)) %>%
+      group_by(year, doy_h_rounded, site) %>%
+      summarise(water_depth = mean(water_depth, na.rm = TRUE), .groups = 'drop') %>%
+      pivot_wider(names_from = site, values_from = water_depth, names_prefix = "")
+    
+    # Join the data together
+    result_data <- base_data %>%
+      left_join(water_depth_data, by = c("year", "doy_h_rounded")) %>%
+      select(-doy_h_rounded) %>%
+      rename(
+        `Year` = year, 
+        `Timestamp` = timestamp,
+        `Day of Year` = doy_h_orig,
+        `Precipitation (cm)` = lag_precip
+      )
+    
+    # Add " Water Depth (cm)" suffix to site columns
+    site_columns <- intersect(names(result_data), input$selected_sites)
+    if (length(site_columns) > 0) {
+      result_data <- result_data %>%
+        rename_with(~ paste(.x, "Water Depth (cm)"), .cols = all_of(site_columns))
+    }
+    
+    result_data %>% arrange(Year, `Day of Year`)
+  })
+  
+  # Reactive for significance testing results - now checks if both wetlands are selected
+  significance_results <- reactive({
+    req(input$stats_year, input$stats_site)
+    
+    # Check if both wetlands are represented in selected sites
+    selected_wetlands <- wl_stats %>%
+      filter(site %in% input$stats_site) %>%
+      pull(wetland) %>%
+      unique()
+    
+    # Only calculate significance if both wetlands are represented
+    if (length(selected_wetlands) >= 2 && all(c("Great Meadow", "Gilmore Meadow") %in% selected_wetlands)) {
+      calculate_wetland_significance(wl_stats, input$stats_year, input$stats_site, alpha = 0.05)
+    } else {
+      NULL
+    }
+  })
+  
+  # Reactive to determine if we should show significance info
+  show_significance_info <- reactive({
+    req(input$stats_site, input$time_summary)
+    
+    if (input$time_summary != "multi") return(FALSE)
+    
+    selected_wetlands <- wl_stats %>%
+      filter(site %in% input$stats_site) %>%
+      pull(wetland) %>%
+      unique()
+    
+    return(length(selected_wetlands) >= 2 && all(c("Great Meadow", "Gilmore Meadow") %in% selected_wetlands))
+  })
+  
+  
+  # setting up average WL stats and calculating stats output tables
+  filtered_stats <- reactive({
+    req(input$stats_site, input$stats_year, input$time_summary)
+    
+    data <- wl_stats %>%
+      filter(site %in% input$stats_site, year %in% input$stats_year)
+    
+    if (input$time_summary == "year") {
+      # ---- Option 1: Per-Year Summary ----
+      data %>%
+        mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
+        select(
+          Year = year,
+          Site = site,
+          `Mean Water Level (cm)` = WL_mean,
+          `SD Water Level (cm)` = WL_sd,
+          `Minimum Water Level (cm)` = WL_min,
+          `Maximum Water Level (cm)` = WL_max,
+          `Maximum Hourly Increase (cm)` = max_inc,
+          `Maximum Hourly Decrease (cm)` = max_dec,
+          `Growing Season Change (cm)` = GS_change,
+          `GS % Surface Water` = prop_over_0cm,
+          `GS % Within 30cm` = prop_bet_0_neg30cm,
+          `GS % Over 30cm Deep` = prop_under_neg30cm
+        )
+    } else {
+      # ---- Option 2: Average Across Years ----
+      # Per-site summary
+      data_site <- data %>%
+        group_by(site, wetland) %>%
+        summarise(
+          Year = paste0(min(year), "–", max(year)),
+          `Mean Water Level (cm)` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level (cm)` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level (cm)` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level (cm)` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase (cm)` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease (cm)` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change (cm)` = round(mean(GS_change, na.rm = TRUE), 2),
+          `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
+          `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
+          `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
+          .groups = "drop"
+        )
+      
+      # Per-wetland "All Sites" summary
+      data_wetland <- data %>%
+        group_by(wetland) %>%
+        summarise(
+          site = "All Sites",
+          Year = paste0(min(year), "–", max(year)),
+          `Mean Water Level (cm)` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level (cm)` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level (cm)` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level (cm)` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase (cm)` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease (cm)` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change (cm)` = round(mean(GS_change, na.rm = TRUE), 2),
+          `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
+          `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
+          `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
+          .groups = "drop"
+        )
+      
+      bind_rows(data_site, data_wetland) %>%
+        distinct() %>% 
+        rename(Site = site,
+               Wetland = wetland)
+    }
+  })
+  
+  # reactive table output for selected data from hydrograph
+  output$brush_info <- renderTable({
+    processed_brush_data()
+  })
+  
+  # Output for significance information display
+  output$significance_info <- renderUI({
+    if (show_significance_info()) {
+      sig_results <- significance_results()
+      
+      if (!is.null(sig_results)) {
+        sig_vars <- sig_results %>% 
+          filter(significant) %>% 
+          pull(variable)
+        
+        if (length(sig_vars) > 0) {
+          # Map variable names to display names
+          var_display_names <- c(
+            "WL_mean" = "Mean Water Level",
+            "WL_sd" = "SD Water Level", 
+            "WL_min" = "Minimum Water Level",
+            "WL_max" = "Maximum Water Level",
+            "max_inc" = "Maximum Hourly Increase",
+            "max_dec" = "Maximum Hourly Decrease",
+            "GS_change" = "Growing Season Change",
+            "prop_over_0cm" = "GS % Surface Water",
+            "prop_bet_0_neg30cm" = "GS % Within 30cm",
+            "prop_under_neg30cm" = "GS % Over 30cm Deep"
+          )
+          
+          sig_display_names <- var_display_names[sig_vars]
+          sig_display_names <- sig_display_names[!is.na(sig_display_names)]
+          
+          div(class = "significance-info",
+              h5(icon("exclamation-triangle"), " Statistical Significance", 
+                 style = "color: #856404; margin-bottom: 10px;"),
+              p("Highlighted variables show significant differences (p < 0.05) between Great Meadow and Gilmore Meadow wetlands:", 
+                style = "margin-bottom: 8px; font-size: 0.9rem;"),
+              tags$ul(
+                lapply(sig_display_names, function(name) {
+                  tags$li(name, style = "font-size: 0.85rem; color: #856404;")
+                })
+              ),
+              p("Statistical tests compare averages across all selected years and sites within each wetland.", 
+                style = "margin-top: 5px; margin-bottom: 10px; font-size: 0.8rem; font-style: italic; color: #6c757d;")
+          )
+        }
+      }
+    }
+  })
+  
+  # reactive table output for WL stats with significance highlighting
+  output$wl_stats <- DT::renderDataTable({
+    data <- filtered_stats()
+    
+    dt <- datatable(
+      data,
+      options = list(pageLength = 10, scrollX = TRUE)
+    ) %>%
+      formatStyle(
+        'Site',
+        target = 'cell',
+        fontWeight = styleEqual("All Sites", "bold")
+      )
+    
+    # Add significance highlighting only when appropriate
+    if (show_significance_info()) {
+      sig_results <- significance_results()
+      
+      if (!is.null(sig_results)) {
+        # Map variable names to column names in the table
+        var_mapping <- c(
+          "WL_mean" = "Mean Water Level (cm)",
+          "WL_sd" = "SD Water Level (cm)", 
+          "WL_min" = "Minimum Water Level (cm)",
+          "WL_max" = "Maximum Water Level (cm)",
+          "max_inc" = "Maximum Hourly Increase (cm)",
+          "max_dec" = "Maximum Hourly Decrease (cm)",
+          "GS_change" = "Growing Season Change (cm)",
+          "prop_over_0cm" = "GS % Surface Water",
+          "prop_bet_0_neg30cm" = "GS % Within 30cm",
+          "prop_under_neg30cm" = "GS % Over 30cm Deep"
+        )
+        
+        # Apply highlighting for significant variables
+        for (var_name in names(var_mapping)) {
+          col_name <- var_mapping[var_name]
+          sig_row <- sig_results[sig_results$variable == var_name, ]
+          
+          if (nrow(sig_row) > 0 && sig_row$significant) {
+            dt <- dt %>%
+              formatStyle(
+                col_name,
+                valueColumns = "Site",
+                backgroundColor = styleEqual("All Sites", "#fff3cd"),
+                fontWeight = styleEqual("All Sites", "bold")
+              )
+          }
+        }
+      }
+    }
+    
+    dt
+  })
+  
+  # Download handler for brushed data
+  output$download_brush <- downloadHandler(
+    filename = function() {
+      paste("hydrograph_selected_data_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      write.csv(processed_brush_data(), file, row.names = FALSE)
+    }
+  )
+  
+  # Download handler for water level stats
+  output$download_stats <- downloadHandler(
+    filename = function() {
+      if (input$time_summary == "multi") {
+        paste("wetland_averaged_stats_", Sys.Date(), ".csv", sep = "")
+      } else {
+        paste("site_stats_", Sys.Date(), ".csv", sep = "")
+      }
+    },
+    content = function(file) {
+      write.csv(filtered_stats(), file, row.names = FALSE)
+    }
+  )
+  
+}
+
+# Run app
+shinyApp(ui, server)
+
+
+
+
+
+
+
+
+####----------------------------------------------------------------------------
+
+
+
+
+
+
+#9/8/25 APP prior to multiple select sites for hydrographs
+
+library(shiny)
+library(tidyverse)
+library(lubridate)
+library(patchwork)
+library(shinyWidgets)
+library(DT)
+library(bslib)
+
+# Read & prepare processed data
+gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250715.csv") %>%
+  rename(Date = date, Year = year, precip_cm = precip.cm) %>%
+  mutate(Date = as.Date(Date),
+         timestamp = as_datetime(timestamp),
+         site = paste("Great Meadow", plot.num),
+         water.depth = case_when(
+           Year == 2016 & doy_h == 159.12 & plot.num == 3 & water.depth < -120 ~ NA_real_,
+           Year == 2017 & doy_h == 215.02 & plot.num == 6 & water.depth < -115 ~ NA_real_,
+           Year == 2021 & plot.num == 3 & doy == 224 & water.depth > 400 ~ NA_real_,
+           Year == 2021 & plot.num == 3 & doy == 225 & water.depth > 400 ~ NA_real_,
+           TRUE ~ water.depth
+         )) %>%
+  mutate(siteyear = paste(site, Year, sep = "_"))
+
+gl <- read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv") %>%
+  rename(water.depth = GILM_WL) %>%
+  mutate(
+    site = "Gilmore Meadow",
+    
+    # Try to parse full datetime, fallback to date only + midnight
+    timestamp_parsed = mdy_hm(timestamp),
+    timestamp_parsed = if_else(
+      is.na(timestamp_parsed),
+      mdy(timestamp),
+      timestamp_parsed
+    ),
+    timestamp_parsed = as.POSIXct(timestamp_parsed),
+    timestamp = timestamp_parsed,
+    
+    # Standardize Date column too
+    Date = mdy(Date)
+  ) %>%
+  select(timestamp, 
+         Date,
+         doy,
+         Year,
+         precip_cm,
+         water.depth,
+         lag.precip,
+         hr,
+         doy_h,
+         site)
+
+all_data <- bind_rows(gm, gl) %>% 
+  filter(Year >= 2016 & Year <= 2023) %>% 
+  select(timestamp, 
+         date = Date, 
+         year = Year, 
+         doy, 
+         hr, 
+         doy_h,
+         precip_cm,
+         lag_precip = lag.precip,
+         water_depth = water.depth,
+         site)
+
+wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>% 
+  select(year,
+         stat, 
+         `Gilmore Meadow` = gilmore.meadow, 
+         `Great Meadow 1` = great.meadow.1, 
+         `Great Meadow 2` = great.meadow.2, 
+         `Great Meadow 3` = great.meadow.3, 
+         `Great Meadow 4` = great.meadow.4, 
+         `Great Meadow 5` = great.meadow.5, 
+         `Great Meadow 6` = great.meadow.6) %>% 
+  pivot_longer(cols = -c(year, stat), names_to = "site", values_to = "value") %>% 
+  pivot_wider(names_from = stat, values_from = value) %>%
+  arrange(site, year) %>% 
+  mutate(
+    wetland = case_when(
+      grepl("Great Meadow", site, ignore.case = TRUE) ~ "Great Meadow",
+      grepl("Gilmore Meadow", site, ignore.case = TRUE) ~ "Gilmore Meadow",
+      TRUE ~ "Unknown"
+    )
+  )
+
+
+# Function to calculate significance tests between wetlands
+calculate_wetland_significance <- function(data, selected_years, selected_sites, alpha = 0.05) {
+  # Filter data for selected years and sites
+  filtered_data <- data %>%
+    filter(year %in% selected_years, site %in% selected_sites) %>%
+    mutate(site_group = ifelse(grepl("Great Meadow", site), "Great Meadow", site))
+  
+  # Check if we have both wetlands represented in the selected sites
+  wetlands_present <- unique(filtered_data$site_group)
+  
+  # Only run tests if both wetlands are present
+  if (length(wetlands_present) < 2 || !all(c("Great Meadow", "Gilmore Meadow") %in% wetlands_present)) {
+    return(NULL)  # Return NULL if we can't compare between wetlands
+  }
+  
+  # Get all numeric stat columns
+  stat_cols <- filtered_data %>% select(where(is.numeric), -year) %>% names()
+  
+  # Run t-tests for each variable and store results
+  t_test_results <- map_dfr(stat_cols, function(var) {
+    formula <- as.formula(paste(var, "~ site_group"))
+    tryCatch({
+      test <- t.test(formula, data = filtered_data)
+      data.frame(
+        variable = var,
+        p_value = test$p.value,
+        significant = test$p.value < alpha,
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      data.frame(
+        variable = var,
+        p_value = NA,
+        significant = FALSE,
+        stringsAsFactors = FALSE
+      )
+    })
+  })
+  
+  return(t_test_results)
+}
+
+
+# UI 
+ui <- page_fluid(
+  theme = bs_theme(
+    version = 5,
+    bootswatch = "flatly",
+    primary = "#1B365D",
+    secondary = "#4C6D9A",    
+    success = "#2E86C1",
+    info = "#3498db",
+    warning = "#f39c12",
+    danger = "#e74c3c",
+    base_font = font_google("Open Sans"),
+    heading_font = font_google("Open Sans", wght = c(400, 700))
+  ),
+  
+  # Custom CSS for additional styling
+  tags$head(
+    tags$style(HTML("
+      .content-section {
+        margin: 30px 0;
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border: 2px solid #1B365D;
+      }
+      
+      .section-title {
+        color: #1B365D;
+        font-weight: 600;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #4C6D9A;
+      }
+      
+      .sidebar-custom {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border: 1px solid #dee2e6;
+      }
+      
+      .main-title {
+        background: linear-gradient(135deg, #1B365D 0%, #4C6D9A 100%);
+        color: white;
+        padding: 30px;
+        margin: -15px -15px 30px -15px;
+        text-align: center;
+        border-radius: 0 0 20px 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      
+      .brush-info-section {
+        background: linear-gradient(135deg, #e8f4f8 0%, #f0f8ff 100%);
+        border-radius: 12px;
+        padding: 20px;
+        margin: 20px 0;
+        border: 1px solid #4C6D9A;
+      }
+      
+      .stats-main {
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+      }
+      
+      .dataTables_wrapper {
+        font-size: 0.85rem !important;
+      }
+
+      .dataTables_wrapper table {
+        font-size: 0.8rem !important;
+      }
+
+      .dataTables_wrapper .dataTables_info,
+      .dataTables_wrapper .dataTables_paginate {
+        font-size: 0.75rem !important;
+      }
+      
+    "))
+  ),
+  
+  # Main title with gradient background
+  div(class = "main-title",
+      h1("Wetland Hydrograph Visualizer", 
+         style = "margin: 0; font-size: 2rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3)")
+  ),
+  
+  # First section: Hydrographs 
+  div(class = "content-section",
+      layout_sidebar(
+        sidebar = sidebar(
+          class = "sidebar-custom",
+          width = 300,
+          h4("Hydrograph Controls", style = "color: #1B365D; margin-bottom: 20px;"),
+          
+          selectInput("gm_site", 
+                      label = div(icon("map-marker"), "Select a Great Meadow Site:"),
+                      choices = sort(unique(all_data$site[grepl("Great Meadow", all_data$site)])),
+                      selected = "Great Meadow 1"),
+          
+          div(style = "margin-bottom: 15px;",
+              pickerInput("year", 
+                          label = div(icon("calendar"), "Select Year(s):"),
+                          choices = sort(unique(all_data$year)),
+                          selected = 2023,
+                          multiple = TRUE,
+                          options = list(
+                            `actions-box` = TRUE,
+                            `deselect-all-text` = "Clear all",
+                            `select-all-text` = "Select all",
+                            `none-selected-text` = "Choose year(s)",
+                            `live-search` = TRUE,
+                            style = "btn-outline-primary"
+                          ))),
+          
+          br(),
+          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Use the brush tool to select data points on the hydrograph for a detailed view of the data.", 
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
+          
+          div(style = "margin-top: 15px; text-align: center;",
+              downloadButton("download_brush", "Download Selected Data", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("download")))
+        ),
+        
+        card(
+          full_screen = TRUE,
+          card_header(
+            class = "bg-primary text-white",
+            "Hydrographs by Year"
+          ),
+          plotOutput("hydrograph", height = "600px", 
+                     brush = brushOpts(id = "hydro_brush", fill = "#4C6D9A", opacity = 0.3))
+        )
+      )
+  ),
+  
+  # Selected data points section with improved styling
+  div(class = "brush-info-section",
+      div(class = "row",
+          div(class = "col-12",
+              card(
+                card_header(
+                  class = "bg-success text-white",
+                  "Selected Data from Hydrograph:"
+                ),
+                tableOutput("brush_info")
+              )
+          )
+      )
+  ),
+  
+  # Second section: Water Level Stats with improved styling
+  div(class = "content-section stats-main",
+      layout_sidebar(
+        sidebar = sidebar(
+          class = "sidebar-custom",
+          width = 300,
+          h4("Statistics Controls", style = "color: #1B365D; margin-bottom: 20px;"),
+          
+          pickerInput("stats_site", 
+                      label = div(icon("map-marker"), "Select Site(s):"),
+                      choices = sort(unique(wl_stats$site)),
+                      selected = "Great Meadow 1",
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `deselect-all-text` = "Clear all",
+                        `select-all-text` = "Select all",
+                        `none-selected-text` = "Choose site(s)",
+                        `live-search` = TRUE,
+                        style = "btn-outline-primary"
+                      )),
+          
+          div(style = "margin-bottom: 15px;",
+              pickerInput("stats_year", 
+                          label = div(icon("calendar"), "Select Years:"),
+                          choices = sort(unique(wl_stats$year)),
+                          selected = c(2023, 2022, 2021, 2020),
+                          multiple = TRUE,
+                          options = list(
+                            `actions-box` = TRUE,
+                            `deselect-all-text` = "Clear all",
+                            `select-all-text` = "Select all",
+                            `none-selected-text` = "Choose year(s)",
+                            `live-search` = TRUE,
+                            style = "btn-outline-primary"
+                          ))),
+          
+          div(style = "margin-bottom: 15px;",
+              radioButtons("time_summary", "Summarize Stats:",
+                           choices = c("Each Year" = "year", "Average Across Years" = "multi"),
+                           selected = "year",
+                           inline = TRUE)),
+          
+          br(),
+          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Growing Season statistics calculated from May through October.", 
+                style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
+          
+          div(style = "margin-top: 15px; text-align: center;",
+              downloadButton("download_stats", "Download Table", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("download")))
+        ),
+        
+        card(
+          full_screen = TRUE,
+          card_header(
+            class = "bg-primary text-white",
+            "Growing Season Water Level Statistics"
+          ),
+          
+          div(style = "padding: 10px;",
+              uiOutput("significance_info"),
+              dataTableOutput("wl_stats"))
+        )
+      )
+  )
+)
+
+# Server
+server <- function(input, output, session) {
+  
+  # Reactive data for plotting
+  plot_data <- reactive({
+    req(input$year, input$gm_site)
+    
+    all_data %>%
+      filter(year %in% input$year, doy > 134, doy < 275) %>%
+      filter(site %in% c(input$gm_site, "Gilmore Meadow"))
+  })
+  
+  output$hydrograph <- renderPlot({
+    plot_data_filtered <- plot_data()
+    req(nrow(plot_data_filtered) > 0)
+    
+    # Calculate minimum water level across all data for consistent precipitation baseline
+    minWL <- min(plot_data_filtered$water_depth, na.rm = TRUE)
+    
+    # Create the plot using simplified approach
+    ggplot(plot_data_filtered, aes(x = doy_h, y = water_depth)) +
+      # Water level lines by site
+      geom_line(data = plot_data_filtered %>% filter(site == input$gm_site),
+                aes(color = input$gm_site), size = 0.7) +
+      geom_line(data = plot_data_filtered %>% filter(site == "Gilmore Meadow"),
+                aes(color = "Gilmore Meadow"), size = 0.7) +
+      
+      # Precipitation line (scaled by multiplier of 5 and offset by minWL)
+      geom_line(aes(x = doy_h, y = lag_precip * 5 + minWL, color = "Precipitation"), 
+                size = 0.7) +
+      
+      # Ground level reference
+      geom_hline(yintercept = 0, color = 'brown') +
+      
+      # Facet by year
+      facet_wrap(~ year, ncol = 1, scales = "free_y") +
+      
+      # Colors
+      scale_color_manual(values = c(
+        setNames("black", input$gm_site),
+        "Gilmore Meadow" = "darkgray",
+        "Precipitation" = "blue"
+      )) +
+      
+      # Axes and labels
+      labs(y = 'Water Level (cm)', x = 'Date') +
+      scale_x_continuous(
+        breaks = c(121, 152, 182, 213, 244, 274),
+        labels = c('May-01', 'Jun-01', 'Jul-01', 'Aug-01', 'Sep-01', 'Oct-01')
+      ) +
+      
+      # Secondary axis for precipitation
+      scale_y_continuous(
+        sec.axis = sec_axis(~ .,
+                            breaks = c(minWL, minWL + 10),
+                            name = 'Hourly Precip. (cm)',
+                            labels = c('0', '2'))
+      ) +
+      
+      # Theme
+      theme_bw() +
+      theme(
+        plot.title = element_text(hjust = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text.y.right = element_text(color = 'blue'),
+        axis.title.y.right = element_text(color = 'blue'),
+        strip.text = element_text(size = 11),
+        legend.position = "bottom",
+        legend.title = element_blank()
+      )
+  })
+  
+  # Reactive for processed brushed data
+  processed_brush_data <- reactive({
+    req(input$hydro_brush)
+    
+    plot_data_filtered <- plot_data()
+    req(nrow(plot_data_filtered) > 0)
+    
+    selected_data <- brushedPoints(
+      plot_data_filtered,
+      brush = input$hydro_brush,
+      xvar = "doy_h",
+      yvar = "water_depth"
+    ) %>%
+      select(site, year, doy_h, timestamp, water_depth, lag_precip) %>%
+      arrange(year, doy_h) %>%
+      mutate(
+        doy_h = round(doy_h, 2),
+        water_depth = round(water_depth, 2),
+        lag_precip = round(lag_precip, 3),
+        timestamp = format(timestamp, "%Y-%m-%d %H:%M:%S")
+      )
+    
+    if (nrow(selected_data) == 0) {
+      return(data.frame(Message = "No points selected - try brushing over the water level lines"))
+    }
+    
+    selected_data %>%
+      mutate(doy_h_rounded = round(doy_h, 1)) %>%
+      group_by(year, doy_h_rounded) %>%
+      summarise(
+        timestamp = first(timestamp),
+        doy_h = first(doy_h),
+        lag_precip = first(lag_precip),
+        great_meadow_depth = ifelse(any(site == input$gm_site), 
+                                    water_depth[site == input$gm_site][1], NA),
+        gilmore_depth = ifelse(any(site == "Gilmore Meadow"), 
+                               water_depth[site == "Gilmore Meadow"][1], NA),
+        .groups = 'drop'
+      ) %>%
+      select(-doy_h_rounded) %>%
+      rename(
+        `Year` = year, 
+        `Timestamp` = timestamp,
+        `Day of Year` = doy_h,
+        `Precipitation (cm)` = lag_precip
+      ) %>%
+      rename_with(~ paste(input$gm_site, "Water Depth (cm)"), .cols = great_meadow_depth) %>%
+      rename_with(~ "Gilmore Meadow Water Depth (cm)", .cols = gilmore_depth) %>%
+      arrange(Year, `Day of Year`)
+  })
+  
+  # Reactive for significance testing results - now checks if both wetlands are selected
+  significance_results <- reactive({
+    req(input$stats_year, input$stats_site)
+    
+    # Check if both wetlands are represented in selected sites
+    selected_wetlands <- wl_stats %>%
+      filter(site %in% input$stats_site) %>%
+      pull(wetland) %>%
+      unique()
+    
+    # Only calculate significance if both wetlands are represented
+    if (length(selected_wetlands) >= 2 && all(c("Great Meadow", "Gilmore Meadow") %in% selected_wetlands)) {
+      calculate_wetland_significance(wl_stats, input$stats_year, input$stats_site, alpha = 0.05)
+    } else {
+      NULL
+    }
+  })
+  
+  # Reactive to determine if we should show significance info
+  show_significance_info <- reactive({
+    req(input$stats_site, input$time_summary)
+    
+    if (input$time_summary != "multi") return(FALSE)
+    
+    selected_wetlands <- wl_stats %>%
+      filter(site %in% input$stats_site) %>%
+      pull(wetland) %>%
+      unique()
+    
+    return(length(selected_wetlands) >= 2 && all(c("Great Meadow", "Gilmore Meadow") %in% selected_wetlands))
+  })
+  
+  
+  # setting up average WL stats and calculating stats output tables
+  filtered_stats <- reactive({
+    req(input$stats_site, input$stats_year, input$time_summary)
+    
+    data <- wl_stats %>%
+      filter(site %in% input$stats_site, year %in% input$stats_year)
+    
+    if (input$time_summary == "year") {
+      # ---- Option 1: Per-Year Summary ----
+      data %>%
+        mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
+        select(
+          Year = year,
+          Site = site,
+          `Mean Water Level (cm)` = WL_mean,
+          `SD Water Level (cm)` = WL_sd,
+          `Minimum Water Level (cm)` = WL_min,
+          `Maximum Water Level (cm)` = WL_max,
+          `Maximum Hourly Increase (cm)` = max_inc,
+          `Maximum Hourly Decrease (cm)` = max_dec,
+          `Growing Season Change (cm)` = GS_change,
+          `GS % Surface Water` = prop_over_0cm,
+          `GS % Within 30cm` = prop_bet_0_neg30cm,
+          `GS % Over 30cm Deep` = prop_under_neg30cm
+        )
+    } else {
+      # ---- Option 2: Average Across Years ----
+      # Per-site summary
+      data_site <- data %>%
+        group_by(site, wetland) %>%
+        summarise(
+          Year = paste0(min(year), "–", max(year)),
+          `Mean Water Level (cm)` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level (cm)` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level (cm)` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level (cm)` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase (cm)` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease (cm)` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change (cm)` = round(mean(GS_change, na.rm = TRUE), 2),
+          `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
+          `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
+          `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
+          .groups = "drop"
+        )
+      
+      # Per-wetland "All Sites" summary
+      data_wetland <- data %>%
+        group_by(wetland) %>%
+        summarise(
+          site = "All Sites",
+          Year = paste0(min(year), "–", max(year)),
+          `Mean Water Level (cm)` = round(mean(WL_mean, na.rm = TRUE), 2),
+          `SD Water Level (cm)` = round(mean(WL_sd, na.rm = TRUE), 2),
+          `Minimum Water Level (cm)` = round(mean(WL_min, na.rm = TRUE), 2),
+          `Maximum Water Level (cm)` = round(mean(WL_max, na.rm = TRUE), 2),
+          `Maximum Hourly Increase (cm)` = round(mean(max_inc, na.rm = TRUE), 2),
+          `Maximum Hourly Decrease (cm)` = round(mean(max_dec, na.rm = TRUE), 2),
+          `Growing Season Change (cm)` = round(mean(GS_change, na.rm = TRUE), 2),
+          `GS % Surface Water` = round(mean(prop_over_0cm, na.rm = TRUE), 2),
+          `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
+          `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
+          .groups = "drop"
+        )
+      
+      bind_rows(data_site, data_wetland) %>%
+        distinct() %>% 
+        rename(Site = site,
+               Wetland = wetland)
+    }
+  })
+  
+  # reactive table output for selected data from hydrograph
+  output$brush_info <- renderTable({
+    processed_brush_data()
+  })
+  
+  # Output for significance information display
+  output$significance_info <- renderUI({
+    if (show_significance_info()) {
+      sig_results <- significance_results()
+      
+      if (!is.null(sig_results)) {
+        sig_vars <- sig_results %>% 
+          filter(significant) %>% 
+          pull(variable)
+        
+        if (length(sig_vars) > 0) {
+          # Map variable names to display names
+          var_display_names <- c(
+            "WL_mean" = "Mean Water Level",
+            "WL_sd" = "SD Water Level", 
+            "WL_min" = "Minimum Water Level",
+            "WL_max" = "Maximum Water Level",
+            "max_inc" = "Maximum Hourly Increase",
+            "max_dec" = "Maximum Hourly Decrease",
+            "GS_change" = "Growing Season Change",
+            "prop_over_0cm" = "GS % Surface Water",
+            "prop_bet_0_neg30cm" = "GS % Within 30cm",
+            "prop_under_neg30cm" = "GS % Over 30cm Deep"
+          )
+          
+          sig_display_names <- var_display_names[sig_vars]
+          sig_display_names <- sig_display_names[!is.na(sig_display_names)]
+          
+          div(class = "significance-info",
+              h5(icon("exclamation-triangle"), " Statistical Significance", 
+                 style = "color: #856404; margin-bottom: 10px;"),
+              p("Highlighted variables show significant differences (p < 0.05) between Great Meadow and Gilmore Meadow wetlands:", 
+                style = "margin-bottom: 8px; font-size: 0.9rem;"),
+              tags$ul(
+                lapply(sig_display_names, function(name) {
+                  tags$li(name, style = "font-size: 0.85rem; color: #856404;")
+                })
+              ),
+              p("Statistical tests compare averages across all selected years and sites within each wetland.", 
+                style = "margin-top: 5px; margin-bottom: 10px; font-size: 0.8rem; font-style: italic; color: #6c757d;")
+          )
+        }
+      }
+    }
+  })
+  
+  # reactive table output for WL stats with significance highlighting
+  output$wl_stats <- DT::renderDataTable({
+    data <- filtered_stats()
+    
+    dt <- datatable(
+      data,
+      options = list(pageLength = 10, scrollX = TRUE)
+    ) %>%
+      formatStyle(
+        'Site',
+        target = 'cell',
+        fontWeight = styleEqual("All Sites", "bold")
+      )
+    
+    # Add significance highlighting only when appropriate
+    if (show_significance_info()) {
+      sig_results <- significance_results()
+      
+      if (!is.null(sig_results)) {
+        # Map variable names to column names in the table
+        var_mapping <- c(
+          "WL_mean" = "Mean Water Level (cm)",
+          "WL_sd" = "SD Water Level (cm)", 
+          "WL_min" = "Minimum Water Level (cm)",
+          "WL_max" = "Maximum Water Level (cm)",
+          "max_inc" = "Maximum Hourly Increase (cm)",
+          "max_dec" = "Maximum Hourly Decrease (cm)",
+          "GS_change" = "Growing Season Change (cm)",
+          "prop_over_0cm" = "GS % Surface Water",
+          "prop_bet_0_neg30cm" = "GS % Within 30cm",
+          "prop_under_neg30cm" = "GS % Over 30cm Deep"
+        )
+        
+        # Apply highlighting for significant variables
+        for (var_name in names(var_mapping)) {
+          col_name <- var_mapping[var_name]
+          sig_row <- sig_results[sig_results$variable == var_name, ]
+          
+          if (nrow(sig_row) > 0 && sig_row$significant) {
+            dt <- dt %>%
+              formatStyle(
+                col_name,
+                valueColumns = "Site",
+                backgroundColor = styleEqual("All Sites", "#fff3cd"),
+                fontWeight = styleEqual("All Sites", "bold")
+              )
+          }
+        }
+      }
+    }
+    
+    dt
+  })
+  
+  # Download handler for brushed data
+  output$download_brush <- downloadHandler(
+    filename = function() {
+      paste("hydrograph_selected_data_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      write.csv(processed_brush_data(), file, row.names = FALSE)
+    }
+  )
+  
+  # Download handler for water level stats
+  output$download_stats <- downloadHandler(
+    filename = function() {
+      if (input$time_summary == "multi") {
+        paste("wetland_averaged_stats_", Sys.Date(), ".csv", sep = "")
+      } else {
+        paste("site_stats_", Sys.Date(), ".csv", sep = "")
+      }
+    },
+    content = function(file) {
+      write.csv(filtered_stats(), file, row.names = FALSE)
+    }
+  )
+  
+}
+
+# Run app
+shinyApp(ui, server)
+
+
+
+
+
+
+
+#-------------------------------------------------------------------------------
+
+
+
+
+
 #### APP CODE PRIOR TO SIGNIFICANCE TESTING ADITION
 
 library(shiny)

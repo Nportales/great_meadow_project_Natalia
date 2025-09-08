@@ -223,10 +223,19 @@ ui <- page_fluid(
           width = 300,
           h4("Hydrograph Controls", style = "color: #1B365D; margin-bottom: 20px;"),
           
-          selectInput("gm_site", 
-                      label = div(icon("map-marker"), "Select a Great Meadow Site:"),
-                      choices = sort(unique(all_data$site[grepl("Great Meadow", all_data$site)])),
-                      selected = "Great Meadow 1"),
+          pickerInput("selected_sites", 
+                      label = div(icon("map-marker"), "Select Site(s):"),
+                      choices = sort(unique(all_data$site)),
+                      selected = c("Great Meadow 1", "Gilmore Meadow"),
+                      multiple = TRUE,
+                      options = list(
+                        `actions-box` = TRUE,
+                        `deselect-all-text` = "Clear all",
+                        `select-all-text` = "Select all",
+                        `none-selected-text` = "Choose site(s)",
+                        `live-search` = TRUE,
+                        style = "btn-outline-primary"
+                      )),
           
           div(style = "margin-bottom: 15px;",
               pickerInput("year", 
@@ -247,6 +256,11 @@ ui <- page_fluid(
           div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
               p(icon("info-circle"), " Use the brush tool to select data points on the hydrograph for a detailed view of the data.", 
                 style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
+          
+          div(style = "margin-top: 10px; text-align: center;",
+              downloadButton("download_plot", "Download Hydrograph", 
+                             class = "btn-primary btn-sm", 
+                             icon = icon("image"))),
           
           div(style = "margin-top: 15px; text-align: center;",
               downloadButton("download_brush", "Download Selected Data", 
@@ -355,11 +369,11 @@ server <- function(input, output, session) {
   
   # Reactive data for plotting
   plot_data <- reactive({
-    req(input$year, input$gm_site)
+    req(input$year, input$selected_sites)
     
     all_data %>%
       filter(year %in% input$year, doy > 134, doy < 275) %>%
-      filter(site %in% c(input$gm_site, "Gilmore Meadow"))
+      filter(site %in% input$selected_sites)
   })
   
   output$hydrograph <- renderPlot({
@@ -369,13 +383,18 @@ server <- function(input, output, session) {
     # Calculate minimum water level across all data for consistent precipitation baseline
     minWL <- min(plot_data_filtered$water_depth, na.rm = TRUE)
     
-    # Create the plot using your simplified approach
+    # Color palette for sites
+    sites <- unique(plot_data_filtered$site)
+    site_colors <- c(
+      "Great Meadow 1" = "black", "Great Meadow 2" = "chartreuse4", "Great Meadow 3" = "green",
+      "Great Meadow 4" = "darkorange", "Great Meadow 5" = "deeppink2", "Great Meadow 6" = "purple",
+      "Gilmore Meadow" = "darkgray", "Precipitation" = "blue"
+    )
+    
+    # Create the plot
     ggplot(plot_data_filtered, aes(x = doy_h, y = water_depth)) +
       # Water level lines by site
-      geom_line(data = plot_data_filtered %>% filter(site == input$gm_site),
-                aes(color = input$gm_site), size = 0.7) +
-      geom_line(data = plot_data_filtered %>% filter(site == "Gilmore Meadow"),
-                aes(color = "Gilmore Meadow"), size = 0.7) +
+      geom_line(aes(color = site), size = 0.7) +
       
       # Precipitation line (scaled by multiplier of 5 and offset by minWL)
       geom_line(aes(x = doy_h, y = lag_precip * 5 + minWL, color = "Precipitation"), 
@@ -388,11 +407,8 @@ server <- function(input, output, session) {
       facet_wrap(~ year, ncol = 1, scales = "free_y") +
       
       # Colors
-      scale_color_manual(values = c(
-        setNames("black", input$gm_site),
-        "Gilmore Meadow" = "darkgray",
-        "Precipitation" = "blue"
-      )) +
+      scale_color_manual(values = site_colors, 
+                         breaks = c(sites, "Precipitation")) +
       
       # Axes and labels
       labs(y = 'Water Level (cm)', x = 'Date') +
@@ -423,20 +439,21 @@ server <- function(input, output, session) {
       )
   })
   
-  # Reactive for processed brushed data
+  # Reactive for processed brushed data - with site columns
   processed_brush_data <- reactive({
     req(input$hydro_brush)
     
     plot_data_filtered <- plot_data()
     req(nrow(plot_data_filtered) > 0)
     
+    # Get brushed points using the simple approach
     selected_data <- brushedPoints(
       plot_data_filtered,
       brush = input$hydro_brush,
       xvar = "doy_h",
       yvar = "water_depth"
     ) %>%
-      select(site, year, doy_h, timestamp, water_depth, lag_precip) %>%
+      select(timestamp, year, doy_h, site, water_depth, lag_precip) %>%
       arrange(year, doy_h) %>%
       mutate(
         doy_h = round(doy_h, 2),
@@ -449,29 +466,36 @@ server <- function(input, output, session) {
       return(data.frame(Message = "No points selected - try brushing over the water level lines"))
     }
     
-    selected_data %>%
-      mutate(doy_h_rounded = round(doy_h, 1)) %>%
-      group_by(year, doy_h_rounded) %>%
-      summarise(
-        timestamp = first(timestamp),
-        doy_h = first(doy_h),
-        lag_precip = first(lag_precip),
-        great_meadow_depth = ifelse(any(site == input$gm_site), 
-                                    water_depth[site == input$gm_site][1], NA),
-        gilmore_depth = ifelse(any(site == "Gilmore Meadow"), 
-                               water_depth[site == "Gilmore Meadow"][1], NA),
-        .groups = 'drop'
-      ) %>%
-      select(-doy_h_rounded) %>%
+    # Create the base data with unique timestamp/precipitation combinations
+    base_data <- selected_data %>%
+      group_by(year, doy_h, timestamp, lag_precip) %>%
+      summarise(.groups = 'drop') %>%
+      arrange(year, doy_h)
+    
+    # Create water depth columns for each site
+    water_depth_data <- selected_data %>%
+      group_by(year, doy_h, timestamp, site) %>%
+      summarise(water_depth = mean(water_depth, na.rm = TRUE), .groups = 'drop') %>%
+      pivot_wider(names_from = site, values_from = water_depth, names_prefix = "")
+    
+    # Join the data together
+    result_data <- base_data %>%
+      left_join(water_depth_data, by = c("year", "doy_h", "timestamp")) %>%
       rename(
-        `Year` = year, 
-        `Timestamp` = timestamp,
+        Year = year,
+        Timestamp = timestamp,
         `Day of Year` = doy_h,
         `Precipitation (cm)` = lag_precip
-      ) %>%
-      rename_with(~ paste(input$gm_site, "Water Depth (cm)"), .cols = great_meadow_depth) %>%
-      rename_with(~ "Gilmore Meadow Water Depth (cm)", .cols = gilmore_depth) %>%
-      arrange(Year, `Day of Year`)
+      )
+    
+    # Add " Water Depth (cm)" suffix to site columns
+    site_columns <- intersect(names(result_data), input$selected_sites)
+    if (length(site_columns) > 0) {
+      result_data <- result_data %>%
+        rename_with(~ paste(.x, "Water Depth (cm)"), .cols = all_of(site_columns))
+    }
+    
+    result_data %>% arrange(Year, `Day of Year`)
   })
   
   # Reactive for significance testing results - now checks if both wetlands are selected
@@ -707,9 +731,83 @@ server <- function(input, output, session) {
     }
   )
   
+  # Download handler for hydrograph plot
+  output$download_plot <- downloadHandler(
+    filename = function() {
+      sites_label <- paste(input$selected_sites, collapse = "_")
+      years_label <- paste(input$year, collapse = "_")
+      paste0("hydrograph_", sites_label, "_", years_label, "_", Sys.Date(), ".png")
+    },
+    content = function(file) {
+      # Recreate the plot
+      plot_data_filtered <- plot_data()
+      req(nrow(plot_data_filtered) > 0)
+      
+      # Calculate minimum water level across all data for consistent precipitation baseline
+      minWL <- min(plot_data_filtered$water_depth, na.rm = TRUE)
+      
+      # Create color palette for sites
+      sites <- unique(plot_data_filtered$site)
+      site_colors <- c(
+        "Great Meadow 1" = "black", "Great Meadow 2" = "red", "Great Meadow 3" = "green",
+        "Great Meadow 4" = "orange", "Great Meadow 5" = "purple", "Great Meadow 6" = "brown",
+        "Gilmore Meadow" = "darkgray", "Precipitation" = "blue"
+      )
+      
+      # Create the plot
+      p <- ggplot(plot_data_filtered, aes(x = doy_h, y = water_depth)) +
+        # Water level lines by site
+        geom_line(aes(color = site), size = 0.7) +
+        
+        # Precipitation line (scaled by multiplier of 5 and offset by minWL)
+        geom_line(aes(x = doy_h, y = lag_precip * 5 + minWL, color = "Precipitation"), 
+                  size = 0.7) +
+        
+        # Ground level reference
+        geom_hline(yintercept = 0, color = 'brown') +
+        
+        # Facet by year
+        facet_wrap(~ year, ncol = 1, scales = "free_y") +
+        
+        # Colors
+        scale_color_manual(values = site_colors, 
+                           breaks = c(sites, "Precipitation")) +
+        
+        # Axes and labels
+        labs(y = 'Water Level (cm)', x = 'Date') +
+        scale_x_continuous(
+          breaks = c(121, 152, 182, 213, 244, 274),
+          labels = c('May-01', 'Jun-01', 'Jul-01', 'Aug-01', 'Sep-01', 'Oct-01')
+        ) +
+        
+        # Secondary axis for precipitation
+        scale_y_continuous(
+          sec.axis = sec_axis(~ .,
+                              breaks = c(minWL, minWL + 10),
+                              name = 'Hourly Precip. (cm)',
+                              labels = c('0', '2'))
+        ) +
+        
+        # Theme
+        theme_bw() +
+        theme(
+          plot.title = element_text(hjust = 0.5),
+          panel.grid.minor = element_blank(),
+          panel.grid.major = element_blank(),
+          axis.text.y.right = element_text(color = 'blue'),
+          axis.title.y.right = element_text(color = 'blue'),
+          strip.text = element_text(size = 11),
+          legend.position = "bottom",
+          legend.title = element_blank()
+        )
+      
+      # Save the plot
+      ggsave(file, plot = p, width = 12, height = 8, dpi = 300, bg = "white")
+    }
+  )
+  
 }
 
 # Run app
 shinyApp(ui, server)
-
 
