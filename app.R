@@ -253,8 +253,8 @@ ui <- page_fluid(
                           ))),
           
           br(),
-          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
-              p(icon("info-circle"), " Use the brush tool to select data points on the hydrograph for a detailed view of the data.", 
+          div(style = "padding: 10px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Use the brush tool (+) by clicking and dragging with your cursor to select data on the hydrograph and view below.", 
                 style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
           
           div(style = "margin-top: 10px; text-align: center;",
@@ -339,8 +339,8 @@ ui <- page_fluid(
                            inline = TRUE)),
           
           br(),
-          div(style = "padding: 15px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
-              p(icon("info-circle"), " Growing Season statistics calculated from May through October.", 
+          div(style = "padding: 10px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
+              p(icon("info-circle"), " Growing season statistics calculated from May through October.", 
                 style = "margin: 0; font-size: 0.9rem; color: #2c3e50;")),
           
           div(style = "margin-top: 15px; text-align: center;",
@@ -636,9 +636,14 @@ server <- function(input, output, session) {
           sig_display_names <- sig_display_names[!is.na(sig_display_names)]
           
           div(class = "significance-info",
-              h5(icon("exclamation-triangle"), " Statistical Significance", 
-                 style = "color: #856404; margin-bottom: 10px;"),
-              p("Highlighted variables show significant differences (p < 0.05) between Great Meadow and Gilmore Meadow wetlands:", 
+              h5(icon("asterisk"), " Statistical Significance", 
+                style = "background-color: #fff3cd; 
+                color: #856404; 
+                padding: 6px 10px; 
+                border-radius: 4px; 
+                display: inline-block; 
+                margin-bottom: 10px;"),
+              p("Yellow highlighted variables show significant differences (p < 0.05) between Great Meadow and Gilmore Meadow wetlands:", 
                 style = "margin-bottom: 8px; font-size: 0.9rem;"),
               tags$ul(
                 lapply(sig_display_names, function(name) {
@@ -657,13 +662,19 @@ server <- function(input, output, session) {
   output$wl_stats <- DT::renderDataTable({
     data <- filtered_stats()
     
+    # Reorder so "All Sites" rows come first
+    data <- data %>%
+      dplyr::arrange(desc(Site == "All Sites"), Site)
+    
     dt <- datatable(
       data,
+      rownames = FALSE,
       options = list(pageLength = 10, scrollX = TRUE)
     ) %>%
       formatStyle(
-        'Site',
-        target = 'cell',
+        columns = names(data),  # apply to all columns
+        valueColumns = "Site",
+        backgroundColor = styleEqual("All Sites", "#d9edf7"), # light blue
         fontWeight = styleEqual("All Sites", "bold")
       )
     
