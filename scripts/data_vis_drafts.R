@@ -200,6 +200,9 @@ invasives <- species_list %>%
 #   theme_minimal()
 
 
+
+####----------------------------------------------------------------------------
+
 # Hydrograph and growing season summary stats - comparison between Great Meadow and Gilmore Meadow
 
 wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>% 
@@ -269,5 +272,60 @@ ggplot(wl_grouped_stats, aes(x = site_group, y = WL_sd)) +
   theme_minimal()
 
 
+####----------------------------------------------------------------------------
 
+# box and whisker plots 
+
+# summarize VMMI by wetland ----------------------------------------------------
+summary_vmmi_wetland <- VMMI_FOA_NETN %>%
+  group_by(wetland) %>%
+  summarise(
+    mean.vmmi = mean(vmmi, na.rm = TRUE),
+    mean.c = mean(mean.coc, na.rm = TRUE),
+    mean.inv.cov = mean(inv.cov, na.rm = TRUE),
+    mean.bryo.cov = mean(bryo.cov, na.rm = TRUE),
+    mean.strol.cov = mean(strtol.cov, na.rm = TRUE),
+    good.sites = n_distinct(site.name[vmmi.rating == "Good"]),
+    fair.sites = n_distinct(site.name[vmmi.rating == "Fair"]),
+    poor.sites = n_distinct(site.name[vmmi.rating == "Poor"]),
+    .groups = "drop"
+  )
+
+# significance tests 
+# Welch two-sample t-test comparing VMMI between the two wetlands
+t_test_vmmi <- t.test(vmmi ~ wetland,
+                      data = VMMI_FOA_NETN %>%
+                        filter(wetland %in% c("Great Meadow", "Gilmore Meadow")))
+
+t_test_vmmi <- t.test(strtol.cov ~ wetland,
+                      data = VMMI_FOA_NETN %>%
+                        filter(wetland %in% c("Great Meadow", "Gilmore Meadow")))
+
+t_test_vmmi
+
+
+# box and whisker plots --------------------------------------------------------
+# pick variables of interest
+vars_to_plot <- c("vmmi", "mean.coc", "inv.cov", "bryo.cov", "strtol.cov")
+
+# reshape into long format
+vmmi_long <- VMMI_FOA_NETN %>%
+  select(wetland, all_of(vars_to_plot)) %>%
+  pivot_longer(
+    cols = all_of(vars_to_plot),
+    names_to = "variable",
+    values_to = "value"
+  )
+
+# make boxplots
+# plot with faceting
+ggplot(vmmi_long, aes(x = wetland, y = value, fill = wetland)) +
+  geom_boxplot(outlier.shape = 21, alpha = 0.6) +
+  facet_wrap(~variable, nrow = 1, scales = "free_y") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  ) +
+  labs(y = "Value", x = "Wetland", title = "Boxplots of Metrics by Wetland")
 

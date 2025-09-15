@@ -8,6 +8,9 @@ library(tidyverse)
 library(dplyr)
 library(stringr)
 library(sf)
+library(gt)
+library(purrr)
+library(ggplot2)
 
 #-----------------------#
 ####    Read Data    ####
@@ -204,34 +207,6 @@ qa_vmmi <- qa_check_coords(VMMI_FOA_NETN, monitoring_sites)
 
 # Save outputs as CSV
 # write.csv(vmmi_corrected, "data/processed_data/FOA_NETN_VMMI_2011_2024.csv", row.names = FALSE)
-
-  
-# summarize VMMI by wetland
-summary_vmmi_wetland <- vmmi_corrected %>%
-  group_by(wetland) %>%
-  summarise(
-    mean.vmmi = mean(vmmi, na.rm = TRUE),
-    mean.c = mean(mean.coc, na.rm = TRUE),
-    mean.inv.cov = mean(inv.cov, na.rm = TRUE),
-    mean.bryo.cov = mean(bryo.cov, na.rm = TRUE),
-    mean.strol.cov = mean(strtol.cov, na.rm = TRUE),
-    good.sites = n_distinct(site.name[vmmi.rating == "Good"]),
-    fair.sites = n_distinct(site.name[vmmi.rating == "Fair"]),
-    poor.sites = n_distinct(site.name[vmmi.rating == "Poor"]),
-    .groups = "drop"
-    )
-
-# significance tests 
-# Welch two-sample t-test comparing VMMI between the two wetlands
-t_test_vmmi <- t.test(vmmi ~ wetland,
-                      data = vmmi_corrected %>%
-                        filter(wetland %in% c("Great Meadow", "Gilmore Meadow")))
-
-t_test_vmmi <- t.test(strtol.cov ~ wetland,
-                      data = vmmi_corrected %>%
-                        filter(wetland %in% c("Great Meadow", "Gilmore Meadow")))
-
-t_test_vmmi
 
 
 ## merge FOA spplist data with NETN spplist data ------------------------------------
@@ -442,6 +417,39 @@ sites_vmmi <- monitoring_sites %>%
 
 
 #### GRAVEYARD ####-------------------------------------------------------------
+
+
+# # get summary table
+# # --- 2. Run t-tests for selected variables ---
+# vars_to_test <- c("vmmi", "mean.coc", "inv.cov", "bryo.cov", "strtol.cov")
+# 
+# t_results <- map_dfr(vars_to_test, function(v) {
+#   f <- as.formula(paste(v, "~ wetland"))
+#   t_res <- t.test(f, data = vmmi_corrected %>%
+#                     filter(wetland %in% c("Great Meadow", "Gilmore Meadow")))
+#   tibble(variable = v,
+#          p_value = t_res$p.value)
+# })
+# 
+# # --- 3. Merge results ---
+# summary_with_p <- summary_vmmi_wetland %>%
+#   pivot_longer(-wetland, names_to = "variable", values_to = "value") %>%
+#   left_join(t_results, by = "variable")
+# 
+# # --- 4. Create table with highlighting ---
+# highlighted_table <- summary_with_p %>%
+#   gt(groupname_col = "wetland") %>%
+#   data_color(
+#     columns = vars(value),
+#     rows = p_value < 0.05,
+#     colors = scales::col_factor(c("yellow", "white"), domain = c(TRUE, FALSE))(TRUE)
+#   ) %>%
+#   fmt_number(columns = value, decimals = 2) %>%
+#   tab_header(title = "Wetland Summary with Significant Differences Highlighted")
+# 
+# # --- 5. Save output ---
+# gtsave(highlighted_table, "outputs/summary_table.pdf")
+
 
 
 ## build pop-up tables for arcgis maps -----------------------------------------
