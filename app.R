@@ -7,19 +7,19 @@ library(DT)
 library(bslib)
 
 # Read & prepare processed data
-gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250715.csv") %>%
-  rename(Date = date, Year = year, precip_cm = precip.cm) %>%
-  mutate(Date = as.Date(Date),
+gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250915.csv") %>%
+  mutate(date = as.Date(date),
          timestamp = as_datetime(timestamp),
          site = paste("Great Meadow", plot.num),
          water.depth = case_when(
-           Year == 2016 & doy_h == 159.12 & plot.num == 3 & water.depth < -120 ~ NA_real_,
-           Year == 2017 & doy_h == 215.02 & plot.num == 6 & water.depth < -115 ~ NA_real_,
-           Year == 2021 & plot.num == 3 & doy == 224 & water.depth > 400 ~ NA_real_,
-           Year == 2021 & plot.num == 3 & doy == 225 & water.depth > 400 ~ NA_real_,
+           year == 2016 & doy_h == 159.12 & plot.num == 3 & water.depth < -120 ~ NA_real_,
+           year == 2017 & doy_h == 215.02 & plot.num == 6 & water.depth < -115 ~ NA_real_,
+           year == 2021 & plot.num == 3 & doy == 224 & water.depth > 400 ~ NA_real_,
+           year == 2021 & plot.num == 3 & doy == 225 & water.depth > 400 ~ NA_real_,
            TRUE ~ water.depth
          )) %>%
-  mutate(siteyear = paste(site, Year, sep = "_"))
+  mutate(siteyear = paste(site, year, sep = "_"))
+
 
 gl <- read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv") %>%
   rename(water.depth = GILM_WL) %>%
@@ -40,9 +40,9 @@ gl <- read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.cs
     Date = mdy(Date)
   ) %>%
   select(timestamp, 
-         Date,
+         date = Date,
          doy,
-         Year,
+         year = Year,
          precip_cm,
          water.depth,
          lag.precip,
@@ -51,10 +51,10 @@ gl <- read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.cs
          site)
 
 all_data <- bind_rows(gm, gl) %>% 
-  filter(Year >= 2016 & Year <= 2023) %>% 
+  filter(year >= 2016 & year <= 2024) %>% 
   select(timestamp, 
-         date = Date, 
-         year = Year, 
+         date, 
+         year, 
          doy, 
          hr, 
          doy_h,
@@ -97,7 +97,7 @@ calculate_wetland_significance <- function(data, selected_years, selected_sites,
   
   # Only run tests if both wetlands are present
   if (length(wetlands_present) < 2 || !all(c("Great Meadow", "Gilmore Meadow") %in% wetlands_present)) {
-    return(NULL)  # Return NULL if we can't compare between wetlands
+    return(NULL)  # return NULL if we can't compare between wetlands
   }
   
   # Get all numeric stat columns
@@ -107,7 +107,7 @@ calculate_wetland_significance <- function(data, selected_years, selected_sites,
   t_test_results <- map_dfr(stat_cols, function(var) {
     formula <- as.formula(paste(var, "~ site_group"))
     tryCatch({
-      test <- t.test(formula, data = filtered_data)
+      test <- t.test(formula, data = filtered_data) # perform t-test
       data.frame(
         variable = var,
         p_value = test$p.value,
@@ -226,7 +226,7 @@ ui <- page_fluid(
           pickerInput("selected_sites", 
                       label = div(icon("map-marker"), "Select Site(s):"),
                       choices = sort(unique(all_data$site)),
-                      selected = c("Great Meadow 1", "Gilmore Meadow"),
+                      selected = c("Great Meadow 1"),
                       multiple = TRUE,
                       options = list(
                         `actions-box` = TRUE,
@@ -241,7 +241,7 @@ ui <- page_fluid(
               pickerInput("year", 
                           label = div(icon("calendar"), "Select Year(s):"),
                           choices = sort(unique(all_data$year)),
-                          selected = 2023,
+                          selected = 2024,
                           multiple = TRUE,
                           options = list(
                             `actions-box` = TRUE,
@@ -321,7 +321,7 @@ ui <- page_fluid(
               pickerInput("stats_year", 
                           label = div(icon("calendar"), "Select Years:"),
                           choices = sort(unique(wl_stats$year)),
-                          selected = c(2023, 2022, 2021, 2020),
+                          selected = c(2024, 2023, 2022, 2021),
                           multiple = TRUE,
                           options = list(
                             `actions-box` = TRUE,
