@@ -151,7 +151,7 @@ clean <- combined %>%
 
 
 ## Write out the clean data
-# write.csv(clean, "data/processed_data/great_meadow_well_data_2024_20250715.csv", row.names = F)
+# write.csv(clean, "data/processed_data/great_meadow_well_data_2024_20250915.csv", row.names = F)
 
 
 

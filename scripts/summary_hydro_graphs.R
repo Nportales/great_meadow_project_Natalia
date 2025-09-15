@@ -17,7 +17,7 @@ library(lubridate)
 #------------------------------------------------#
 
 ## Reading in Kate Millers functions manually because they weren't coming through
-calc_WL_stats <- function(df, from = 2013, to = 2023) {
+calc_WL_stats <- function(df, from = 2013, to = 2024) {
   
   EDT<-"America/New_York"
   well_prp <- df %>% mutate(timestamp = as.POSIXct(timestamp, format = "%m/%d/%Y %H:%M"),
@@ -153,7 +153,7 @@ wl_stats_loop <- function(plot.number) {
   output <- gmwell %>% 
     filter(plot.num == plot.number) %>% 
     select(-plot.num) %>% 
-    calc_WL_stats(., from = 2016, to = 2023) %>% 
+    calc_WL_stats(., from = 2016, to = 2024) %>% 
     mutate(site = paste0("great.meadow.", plot.number))
   
   return(output)
@@ -168,7 +168,7 @@ gm_wl_stats <- map_dfr(1:6, ~wl_stats_loop(.))
 gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv")) %>% 
   rename(gilmore.meadow = GILM_WL)
 
-gil_wl_stats <- calc_WL_stats(gilm, from = 2016, to = 2023)
+gil_wl_stats <- calc_WL_stats(gilm, from = 2016, to = 2024)
 
 
 ## Merge the two meadow wl stats
