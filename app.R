@@ -1,3 +1,9 @@
+#### Hydrograph Visualizer Shiny Dashboard #### 
+
+#---------------------------------------------#
+####        Load Required Packages         ####
+#---------------------------------------------#
+
 library(shiny)
 library(tidyverse)
 library(lubridate)
@@ -6,7 +12,11 @@ library(shinyWidgets)
 library(DT)
 library(bslib)
 
-# Read & prepare processed data
+#-------------------------------------------#
+####    Read & Prepare Processed Data    ####
+#-------------------------------------------#
+
+# Great Meadow data
 gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250915.csv") %>%
   mutate(date = as.Date(date),
          timestamp = as_datetime(timestamp),
@@ -20,7 +30,7 @@ gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250915.csv") %
          )) %>%
   mutate(siteyear = paste(site, year, sep = "_"))
 
-
+# Gilmore Meadow data 
 gl <- read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv") %>%
   rename(water.depth = GILM_WL) %>%
   mutate(
@@ -36,21 +46,43 @@ gl <- read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.cs
     timestamp_parsed = as.POSIXct(timestamp_parsed),
     timestamp = timestamp_parsed,
     
-    # Standardize Date column too
+    # Standardize Date column
     Date = mdy(Date)
   ) %>%
   select(timestamp, 
          date = Date,
          doy,
          year = Year,
-         precip_cm,
+         precip.cm = precip_cm,
          water.depth,
          lag.precip,
          hr,
          doy_h,
          site)
 
-all_data <- bind_rows(gm, gl) %>% 
+# Need to select Great Meadow precip data as default for all data since Gilmore Meadow has precip data too
+# Create precipitation lookup from Great Meadow data
+gm_precip_lookup <- gm %>%
+  select(timestamp, precip.cm, lag.precip) %>%
+  distinct()
+
+# Replace Gilmore precip with Great Meadow precip for matching timestamps
+gl_with_gm_precip <- gl %>%
+  select(-precip.cm, -lag.precip) %>%  # Remove original precip columns
+  left_join(gm_precip_lookup, by = "timestamp") %>%
+  # If no match found, keep original Gilmore precip values as fallback
+  left_join(
+    gl %>% select(timestamp, orig_precip_cm = precip.cm, orig_lag_precip = lag.precip),
+    by = "timestamp"
+  ) %>%
+  mutate(
+    precip.cm = coalesce(precip.cm, orig_precip_cm),
+    lag.precip = coalesce(lag.precip, orig_lag_precip)
+  ) %>%
+  select(-orig_precip_cm, -orig_lag_precip)
+
+# Combine Great Meadow and Gilmore Meadow datasets
+all_data <- bind_rows(gm, gl_with_gm_precip) %>% 
   filter(year >= 2016 & year <= 2024) %>% 
   select(timestamp, 
          date, 
@@ -58,11 +90,12 @@ all_data <- bind_rows(gm, gl) %>%
          doy, 
          hr, 
          doy_h,
-         precip_cm,
+         precip_cm = precip.cm,
          lag_precip = lag.precip,
          water_depth = water.depth,
          site)
 
+# Format water level stats for WL table output 
 wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>% 
   select(year,
          stat, 
@@ -84,6 +117,9 @@ wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>%
     )
   )
 
+#-----------------------#
+####    Functions    ####
+#-----------------------#
 
 # Function to calculate significance tests between wetlands
 calculate_wetland_significance <- function(data, selected_years, selected_sites, alpha = 0.05) {
@@ -92,7 +128,7 @@ calculate_wetland_significance <- function(data, selected_years, selected_sites,
     filter(year %in% selected_years, site %in% selected_sites) %>%
     mutate(site_group = ifelse(grepl("Great Meadow", site), "Great Meadow", site))
   
-  # Check if we have both wetlands represented in the selected sites
+  # Check if both wetlands are represented in the selected sites
   wetlands_present <- unique(filtered_data$site_group)
   
   # Only run tests if both wetlands are present
@@ -128,7 +164,10 @@ calculate_wetland_significance <- function(data, selected_years, selected_sites,
 }
 
 
-# UI 
+#----------------#
+####    UI    ####
+#----------------#
+
 ui <- page_fluid(
   theme = bs_theme(
     version = 5,
@@ -206,6 +245,33 @@ ui <- page_fluid(
         font-size: 0.75rem !important;
       }
       
+    .significance-info h5 {
+      background-color: #fff3cd;
+      color: #856404;
+      padding: 6px 10px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-bottom: 10px;
+    }
+    
+    .significance-info p {
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+    
+    .significance-info ul li {
+      font-size: 0.85rem;
+      color: #856404;
+    }
+    
+    .significance-info .note {
+      margin-top: 5px;
+      margin-bottom: 10px;
+      font-size: 0.8rem;
+      font-style: italic;
+      color: #6c757d;
+    }
+      
     "))
   ),
   
@@ -280,7 +346,7 @@ ui <- page_fluid(
       )
   ),
   
-  # Selected data points section with improved styling
+  # Selected data points section 
   div(class = "brush-info-section",
       div(class = "row",
           div(class = "col-12",
@@ -295,7 +361,7 @@ ui <- page_fluid(
       )
   ),
   
-  # Second section: Water Level Stats with improved styling
+  # Second section: Water Level Stats
   div(class = "content-section stats-main",
       layout_sidebar(
         sidebar = sidebar(
@@ -364,7 +430,10 @@ ui <- page_fluid(
   )
 )
 
-# Server
+#--------------------#
+####    SERVER    ####
+#--------------------#
+
 server <- function(input, output, session) {
   
   # Reactive data for plotting
@@ -396,7 +465,7 @@ server <- function(input, output, session) {
       # Water level lines by site
       geom_line(aes(color = site), size = 0.7) +
       
-      # Precipitation line (scaled by multiplier of 5 and offset by minWL)
+      # Precip line (scaled by multiplier of 5 and offset by minWL)
       geom_line(aes(x = doy_h, y = lag_precip * 5 + minWL, color = "Precipitation"), 
                 size = 0.7) +
       
@@ -417,7 +486,7 @@ server <- function(input, output, session) {
         labels = c('May-01', 'Jun-01', 'Jul-01', 'Aug-01', 'Sep-01', 'Oct-01')
       ) +
       
-      # Secondary axis for precipitation
+      # Secondary axis for precip
       scale_y_continuous(
         sec.axis = sec_axis(~ .,
                             breaks = c(minWL, minWL + 10),
@@ -446,7 +515,7 @@ server <- function(input, output, session) {
     plot_data_filtered <- plot_data()
     req(nrow(plot_data_filtered) > 0)
     
-    # Get brushed points using the simple approach
+    # Get brushed points using brushedPoints()
     selected_data <- brushedPoints(
       plot_data_filtered,
       brush = input$hydro_brush,
@@ -466,7 +535,7 @@ server <- function(input, output, session) {
       return(data.frame(Message = "No points selected - try brushing over the water level lines"))
     }
     
-    # Create the base data with unique timestamp/precipitation combinations
+    # Create the base data with unique timestamp/precip combinations
     base_data <- selected_data %>%
       group_by(year, doy_h, timestamp, lag_precip) %>%
       summarise(.groups = 'drop') %>%
@@ -488,7 +557,7 @@ server <- function(input, output, session) {
         `Precipitation (cm)` = lag_precip
       )
     
-    # Add " Water Depth (cm)" suffix to site columns
+    # Add "Water Depth (cm)" suffix to site columns
     site_columns <- intersect(names(result_data), input$selected_sites)
     if (length(site_columns) > 0) {
       result_data <- result_data %>%
@@ -498,7 +567,7 @@ server <- function(input, output, session) {
     result_data %>% arrange(Year, `Day of Year`)
   })
   
-  # Reactive for significance testing results - now checks if both wetlands are selected
+  # Reactive for significance testing results - checks if both wetlands are selected
   significance_results <- reactive({
     req(input$stats_year, input$stats_site)
     
@@ -531,7 +600,7 @@ server <- function(input, output, session) {
   })
   
   
-  # setting up average WL stats and calculating stats output tables
+  # Setting up average WL stats and calculating stats output tables
   filtered_stats <- reactive({
     req(input$stats_site, input$stats_year, input$time_summary)
     
@@ -602,7 +671,7 @@ server <- function(input, output, session) {
     }
   })
   
-  # reactive table output for selected data from hydrograph
+  # Reactive table output for selected data from hydrograph
   output$brush_info <- renderTable({
     processed_brush_data()
   })
@@ -636,22 +705,14 @@ server <- function(input, output, session) {
           sig_display_names <- sig_display_names[!is.na(sig_display_names)]
           
           div(class = "significance-info",
-              h5(icon("asterisk"), " Statistical Significance", 
-                style = "background-color: #fff3cd; 
-                color: #856404; 
-                padding: 6px 10px; 
-                border-radius: 4px; 
-                display: inline-block; 
-                margin-bottom: 10px;"),
-              p("Yellow highlighted variables show significant differences (p < 0.05) between Great Meadow and Gilmore Meadow wetlands:", 
-                style = "margin-bottom: 8px; font-size: 0.9rem;"),
+              h5(icon("asterisk"), " Statistical Significance"),
+              p("Yellow highlighted variables show significant differences (p < 0.05) between Great Meadow and Gilmore Meadow wetlands:"),
               tags$ul(
                 lapply(sig_display_names, function(name) {
-                  tags$li(name, style = "font-size: 0.85rem; color: #856404;")
+                  tags$li(name)
                 })
               ),
-              p("Statistical tests compare averages across all selected years and sites within each wetland.", 
-                style = "margin-top: 5px; margin-bottom: 10px; font-size: 0.8rem; font-style: italic; color: #6c757d;")
+              p(class = "note", "Statistical tests compare averages across all selected years and sites within each wetland.")
           )
         }
       }
@@ -674,7 +735,7 @@ server <- function(input, output, session) {
       formatStyle(
         columns = names(data),  # apply to all columns
         valueColumns = "Site",
-        backgroundColor = styleEqual("All Sites", "#d9edf7"), # light blue
+        backgroundColor = styleEqual("All Sites", "#d9edf7"), # light blue highlight
         fontWeight = styleEqual("All Sites", "bold")
       )
     
@@ -707,7 +768,7 @@ server <- function(input, output, session) {
               formatStyle(
                 col_name,
                 valueColumns = "Site",
-                backgroundColor = styleEqual("All Sites", "#fff3cd"),
+                backgroundColor = styleEqual("All Sites", "#fff3cd"), # light yellow highlight
                 fontWeight = styleEqual("All Sites", "bold")
               )
           }
