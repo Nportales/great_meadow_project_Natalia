@@ -128,22 +128,24 @@ calculate_wetland_significance <- function(data, selected_years, selected_sites,
     filter(year %in% selected_years, site %in% selected_sites) %>%
     mutate(site_group = ifelse(grepl("Great Meadow", site), "Great Meadow", site))
   
-  # Check if both wetlands are represented in the selected sites
+  # Check both wetlands are present
   wetlands_present <- unique(filtered_data$site_group)
-  
-  # Only run tests if both wetlands are present
   if (length(wetlands_present) < 2 || !all(c("Great Meadow", "Gilmore Meadow") %in% wetlands_present)) {
-    return(NULL)  # return NULL if we can't compare between wetlands
+    return(NULL)
   }
   
-  # Get all numeric stat columns
+  # Get numeric stat columns
   stat_cols <- filtered_data %>% select(where(is.numeric), -year) %>% names()
   
-  # Run t-tests for each variable and store results
+  # Step 1: average each variable by wetland × year
+  yearly_means <- filtered_data %>%
+    group_by(year, site_group) %>%
+    summarise(across(all_of(stat_cols), mean, na.rm = TRUE), .groups = "drop")
+  
+  # Step 2: run t-tests across wetlands for each variable
   t_test_results <- map_dfr(stat_cols, function(var) {
-    formula <- as.formula(paste(var, "~ site_group"))
     tryCatch({
-      test <- t.test(formula, data = filtered_data) # perform t-test
+      test <- t.test(as.formula(paste(var, "~ site_group")), data = yearly_means)
       data.frame(
         variable = var,
         p_value = test$p.value,
@@ -162,6 +164,7 @@ calculate_wetland_significance <- function(data, selected_years, selected_sites,
   
   return(t_test_results)
 }
+
 
 
 #----------------#
