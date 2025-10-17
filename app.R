@@ -123,6 +123,12 @@ wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>%
 
 # Function to calculate significance tests between wetlands
 calculate_wetland_significance <- function(data, selected_years, selected_sites, alpha = 0.05) {
+  # Check minimum number of years
+  if (length(selected_years) <= 3) {
+    message("⚠️ Not enough years selected for significance testing (need >3).")
+    return(NULL)
+  }
+  
   # Filter data for selected years and sites
   filtered_data <- data %>%
     filter(year %in% selected_years, site %in% selected_sites) %>%
@@ -131,11 +137,14 @@ calculate_wetland_significance <- function(data, selected_years, selected_sites,
   # Check both wetlands are present
   wetlands_present <- unique(filtered_data$site_group)
   if (length(wetlands_present) < 2 || !all(c("Great Meadow", "Gilmore Meadow") %in% wetlands_present)) {
+    message("⚠️ Both Great Meadow and Gilmore Meadow must be present for comparison.")
     return(NULL)
   }
   
   # Get numeric stat columns
-  stat_cols <- filtered_data %>% select(where(is.numeric), -year) %>% names()
+  stat_cols <- filtered_data %>%
+    select(where(is.numeric), -year) %>%
+    names()
   
   # Step 1: average each variable by wetland × year
   yearly_means <- filtered_data %>%
@@ -164,6 +173,7 @@ calculate_wetland_significance <- function(data, selected_years, selected_sites,
   
   return(t_test_results)
 }
+
 
 
 
@@ -402,10 +412,14 @@ ui <- page_fluid(
                           ))),
           
           div(style = "margin-bottom: 15px;",
-              radioButtons("time_summary", "Summarize Stats:",
-                           choices = c("Each Year" = "year", "Average Across Years" = "multi"),
-                           selected = "year",
-                           inline = TRUE)),
+              radioButtons(
+                "time_summary", "Summarize Water Level Statistics By:",
+                choices = c(
+                  "Each Year" = "year",
+                  "Average Across Years" = "multi",
+                  "All Sites (with statistical significance)" = "all_sites"
+                ),
+                selected = "year")),
           
           br(),
           div(style = "padding: 10px; background-color: #e8f4f8; border-radius: 8px; border-left: 4px solid #3498db;",
@@ -592,7 +606,7 @@ server <- function(input, output, session) {
   show_significance_info <- reactive({
     req(input$stats_site, input$time_summary)
     
-    if (input$time_summary != "multi") return(FALSE)
+    if (input$time_summary != "all_sites") return(FALSE)
     
     selected_wetlands <- wl_stats %>%
       filter(site %in% input$stats_site) %>%
@@ -628,7 +642,7 @@ server <- function(input, output, session) {
           `GS % Within 30cm` = prop_bet_0_neg30cm,
           `GS % Over 30cm Deep` = prop_under_neg30cm
         )
-    } else {
+    } else if (input$time_summary == "multi") {
       # ---- Option 2: Average Across Years ----
       # Per-site summary
       data_site <- data %>%
@@ -646,10 +660,27 @@ server <- function(input, output, session) {
           `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
           `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
           .groups = "drop"
-        )
+        ) %>%
+        rename(Site = site, Wetland = wetland)
+      
+    } else if (input$time_summary == "all_sites") {
+      # ---- Option 3: All Sites (with statistical significance) ----
+      
+      # Only run if enough years are selected
+      if (length(unique(input$stats_year)) <= 3) {
+        return(data.frame(
+          Message = "Significance testing requires at least 4 years of data."
+        ))
+      }
+      
+      sig_results <- calculate_wetland_significance(
+        wl_stats,
+        selected_years = input$stats_year,
+        selected_sites = input$stats_site
+      )
       
       # Per-wetland "All Sites" summary
-      data_wetland <- data %>%
+      all_sites_data <- data %>%
         group_by(wetland) %>%
         summarise(
           site = "All Sites",
@@ -665,14 +696,18 @@ server <- function(input, output, session) {
           `GS % Within 30cm` = round(mean(prop_bet_0_neg30cm, na.rm = TRUE), 2),
           `GS % Over 30cm Deep` = round(mean(prop_under_neg30cm, na.rm = TRUE), 2),
           .groups = "drop"
-        )
+        ) %>%
+        rename(Site = site, Wetland = wetland)
       
-      bind_rows(data_site, data_wetland) %>%
-        distinct() %>% 
-        rename(Site = site,
-               Wetland = wetland)
+      if (is.null(sig_results)) {
+        all_sites_data
+      } else {
+        all_sites_data
+      }
     }
   })
+  
+  
   
   # Reactive table output for selected data from hydrograph
   output$brush_info <- renderTable({
@@ -681,6 +716,24 @@ server <- function(input, output, session) {
   
   # Output for significance information display
   output$significance_info <- renderUI({
+    # Ensure the input exists before using it
+    req(input$summary_option)
+    
+    # Only show this section when "All Sites (with statistical significance)" is selected
+    if (input$summary_option != "All Sites (with statistical significance)") {
+      return(NULL)
+    }
+    
+    # Base note (directions)
+    base_note <- div(
+      style = "margin-bottom: 10px; background-color: #f9f9f9; padding: 10px; border-left: 4px solid #1B365D;",
+      tags$b("Note:"),
+      p("• To compare sites, both Great Meadow and Gilmore Meadow must be selected."),
+      p("• Significance testing is only available when more than three years are selected."),
+      p("• If fewer than three years are chosen, results will display without significance testing.")
+    )
+    
+    # Significance info (only if available)
     if (show_significance_info()) {
       sig_results <- significance_results()
       
@@ -707,19 +760,25 @@ server <- function(input, output, session) {
           sig_display_names <- var_display_names[sig_vars]
           sig_display_names <- sig_display_names[!is.na(sig_display_names)]
           
-          div(class = "significance-info",
-              h5(icon("asterisk"), " Statistical Significance"),
-              p("Yellow highlighted variables show significant differences (p < 0.05) between Great Meadow and Gilmore Meadow wetlands:"),
-              tags$ul(
-                lapply(sig_display_names, function(name) {
-                  tags$li(name)
-                })
-              ),
-              p(class = "note", "Statistical tests compare averages across all selected years and sites within each wetland.")
-          )
+          return(tagList(
+            base_note,
+            div(class = "significance-info",
+                h5(icon("asterisk"), " Statistical Significance"),
+                p("Yellow highlighted variables show significant differences (p < 0.05) between Great Meadow and Gilmore Meadow wetlands:"),
+                tags$ul(
+                  lapply(sig_display_names, function(name) {
+                    tags$li(name)
+                  })
+                ),
+                p(class = "note", "Statistical tests compare averages across all selected years and sites within each wetland.")
+            )
+          ))
         }
       }
     }
+    
+    # Show note even if no significance info is available
+    return(base_note)
   })
   
   # reactive table output for WL stats with significance highlighting
@@ -738,7 +797,6 @@ server <- function(input, output, session) {
       formatStyle(
         columns = names(data),  # apply to all columns
         valueColumns = "Site",
-        backgroundColor = styleEqual("All Sites", "#d9edf7"), # light blue highlight
         fontWeight = styleEqual("All Sites", "bold")
       )
     
@@ -797,6 +855,8 @@ server <- function(input, output, session) {
     filename = function() {
       if (input$time_summary == "multi") {
         paste("wetland_averaged_stats_", Sys.Date(), ".csv", sep = "")
+      } else if (input$time_summary == "all_sites") {
+        paste("all_sites_significance_stats_", Sys.Date(), ".csv", sep = "")
       } else {
         paste("site_stats_", Sys.Date(), ".csv", sep = "")
       }
