@@ -385,7 +385,7 @@ ui <- page_fluid(
           pickerInput("stats_site", 
                       label = div(icon("map-marker"), "Select Site(s):"),
                       choices = sort(unique(wl_stats$site)),
-                      selected = "Great Meadow 1",
+                      selected = c("Great Meadow 1", "Gilmore Meadow"),
                       multiple = TRUE,
                       options = list(
                         `actions-box` = TRUE,
@@ -666,13 +666,6 @@ server <- function(input, output, session) {
     } else if (input$time_summary == "all_sites") {
       # ---- Option 3: All Sites (with statistical significance) ----
       
-      # Only run if enough years are selected
-      if (length(unique(input$stats_year)) <= 3) {
-        return(data.frame(
-          Message = "Significance testing requires at least 4 years of data."
-        ))
-      }
-      
       sig_results <- calculate_wetland_significance(
         wl_stats,
         selected_years = input$stats_year,
@@ -699,11 +692,7 @@ server <- function(input, output, session) {
         ) %>%
         rename(Site = site, Wetland = wetland)
       
-      if (is.null(sig_results)) {
         all_sites_data
-      } else {
-        all_sites_data
-      }
     }
   })
   
@@ -716,22 +705,17 @@ server <- function(input, output, session) {
   
   # Output for significance information display
   output$significance_info <- renderUI({
-    # Ensure the input exists before using it
-    req(input$summary_option)
-    
     # Only show this section when "All Sites (with statistical significance)" is selected
-    if (input$summary_option != "All Sites (with statistical significance)") {
-      return(NULL)
-    }
+    req(input$time_summary == "all_sites")
     
-    # Base note (directions)
-    base_note <- div(
-      style = "margin-bottom: 10px; background-color: #f9f9f9; padding: 10px; border-left: 4px solid #1B365D;",
-      tags$b("Note:"),
-      p("• To compare sites, both Great Meadow and Gilmore Meadow must be selected."),
-      p("• Significance testing is only available when more than three years are selected."),
-      p("• If fewer than three years are chosen, results will display without significance testing.")
-    )
+    base_note <- HTML("
+    <div style='background-color:#f9f9f9; padding:10px; border-left:4px solid #1B365D; margin-bottom:10px; font-size:13px;'>
+      <strong>Note:</strong><br>
+      • To compare sites, both Great Meadow and Gilmore Meadow must be selected.<br>
+      • Significance testing is only available when more than three years of data are selected.<br>
+      • If fewer than three years are chosen, results will display without significance testing.
+    </div>
+  ")
     
     # Significance info (only if available)
     if (show_significance_info()) {
@@ -762,7 +746,7 @@ server <- function(input, output, session) {
           
           return(tagList(
             base_note,
-            div(class = "significance-info",
+            div(class = "significance-info", style = "margin-bottom: 25px;",
                 h5(icon("asterisk"), " Statistical Significance"),
                 p("Yellow highlighted variables show significant differences (p < 0.05) between Great Meadow and Gilmore Meadow wetlands:"),
                 tags$ul(
@@ -796,8 +780,7 @@ server <- function(input, output, session) {
     ) %>%
       formatStyle(
         columns = names(data),  # apply to all columns
-        valueColumns = "Site",
-        fontWeight = styleEqual("All Sites", "bold")
+        valueColumns = "Site"
       )
     
     # Add significance highlighting only when appropriate
@@ -829,8 +812,7 @@ server <- function(input, output, session) {
               formatStyle(
                 col_name,
                 valueColumns = "Site",
-                backgroundColor = styleEqual("All Sites", "#fff3cd"), # light yellow highlight
-                fontWeight = styleEqual("All Sites", "bold")
+                backgroundColor = styleEqual("All Sites", "#fff3cd") # light yellow highlight
               )
           }
         }
