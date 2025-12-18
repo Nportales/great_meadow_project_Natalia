@@ -262,7 +262,12 @@ ui <- page_fluid(
           
           div(style = "margin-top: 15px; text-align: center;",
               downloadButton("download_brush", "Download Selected Data", 
-                             class = "btn-primary btn-sm", icon = icon("download")))
+                             class = "btn-primary btn-sm", icon = icon("download"))),
+          
+          div(style = "margin-top: 15px; text-align: center;",
+                tags$a(href = "#about",
+                       class = "btn btn-primary btn-sm", icon("info-circle"),
+                       "About")),
         ),
         
         card(
@@ -312,7 +317,12 @@ ui <- page_fluid(
           
           div(style = "margin-top: 15px; text-align: center;",
               downloadButton("download_stats", "Download Table", 
-                             class = "btn-primary btn-sm", icon = icon("download")))
+                             class = "btn-primary btn-sm", icon = icon("download"))),
+          
+          div(style = "margin-top: 15px; text-align: center;",
+              tags$a(href = "#about",
+                     class = "btn btn-primary btn-sm", icon("info-circle"),
+                     "About")),
         ),
         
         card(
@@ -323,7 +333,17 @@ ui <- page_fluid(
               dataTableOutput("wl_stats"))
         )
       )
+  ),
+  
+  # About section
+  div(id = "about",
+    class = "brush-info-section",
+      card(
+        card_header(class = "bg-success text-white", "About"),
+        includeHTML("./www/About.html")
+      )
   )
+  
 )
 
 
