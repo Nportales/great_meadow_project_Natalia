@@ -3,7 +3,7 @@ library(tidyverse)
 library(lubridate)
 
 # Read Great Meadow dataset
-gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250715.csv") %>%
+gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250915.csv") %>%
   rename(Date = date, Year = year, precip_cm = precip.cm) %>%
   mutate(
     Date = as.Date(Date),
