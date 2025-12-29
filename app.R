@@ -120,7 +120,7 @@ create_hydrograph_plot <- function(data) {
     geom_line(aes(color = site), size = 0.7) +
     geom_line(aes(x = doy_h, y = lag_precip * 5 + minWL, color = "Precipitation"), size = 0.7) +
     geom_hline(yintercept = 0, color = 'brown') +
-    facet_wrap(~ year, ncol = 1, scales = "free_y") +
+    facet_wrap(~ year, ncol = 1) +
     scale_color_manual(values = SITE_COLORS, breaks = c(sites, "Precipitation")) +
     labs(y = 'Water Level (cm)', x = 'Date') +
     scale_x_continuous(
@@ -232,7 +232,7 @@ ui <- page_fluid(
   
   # Main title
   div(class = "main-title",
-      h1("Wetland Hydrograph Visualizer", 
+      h1("Wetland Hydrology Dashboard", 
          style = "margin: 0; font-size: 2rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3)")
   ),
   
