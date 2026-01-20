@@ -16,7 +16,7 @@ library(lubridate)
 
 ## Read in the raw sheet from the data file
 
-raw <- readxl::read_excel("data/raw_data/hydrology_data/GREAT MEADOW Full Data & New Graphs 2024 October(1).xlsx", sheet = "Full Data to Oct 2024")
+raw <- readxl::read_excel("data/raw_data/hydrology_data/GREAT MEADOW Full Data & New Graphs 2025 October.xlsx", sheet = "Full Data to Oct 2025")
 
 # raw <- readxl::read_excel("data/raw_data/hydrology_data/GREAT MEADOW Full Data & New Graphs 2024 May.xlsx", sheet = "Full Data to May 2024")
 
@@ -151,7 +151,7 @@ clean <- combined %>%
 
 
 ## Write out the clean data
-# write.csv(clean, "data/processed_data/great_meadow_well_data_2024_20250915.csv", row.names = F)
+# write.csv(clean, "data/processed_data/great_meadow_well_data_2025_20260120.csv", row.names = F)
 
 
 
