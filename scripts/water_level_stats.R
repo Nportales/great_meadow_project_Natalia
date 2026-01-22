@@ -9,6 +9,32 @@ library(lubridate)
 
 # devtools::install_github("KateMMiller/wetlandACAD")
 
+#-------------------------------------------#
+####         Read & Prepare Data         ####
+#-------------------------------------------#
+
+## Read in the data and format for running through Kate's function
+
+## Great Meadow 
+gmwell <- tibble(read.csv("data/processed_data/great_meadow_well_data_2024_20250715.csv")) %>% 
+  rename(Date = date, Year = year, precip_cm = precip.cm) %>% 
+  select(timestamp, Date, doy, Year, precip_cm, water.depth, lag.precip, hr, doy_h, plot.num) %>% 
+  mutate(timestamp = as_datetime(timestamp),
+         water.depth = ifelse(Year == 2016 & doy_h == 159.12 & plot.num == 3 & 
+                                water.depth < -120, NA, water.depth),
+         water.depth = ifelse(Year == 2017 & doy_h == 215.02 & plot.num == 6 & 
+                                water.depth < -115, NA, water.depth),
+         water.depth = ifelse(Year == 2021 & plot.num == 3 & doy == 224 &
+                                water.depth > 400, NA, water.depth),
+         water.depth = ifelse(Year == 2021 & plot.num == 3 & doy == 225 &
+                                water.depth > 400, NA, water.depth))
+
+
+## Gilmore Meadow
+gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv")) %>% 
+  rename(gilmore.meadow = GILM_WL)
+
+
 #------------------------------------------------#
 ####                Functions                 ####
 #------------------------------------------------#
@@ -96,32 +122,6 @@ wl_stats_loop <- function(plot.number) {
   
   return(output)
 }
-
-
-#-------------------------------------------#
-####    Read & Prepare Processed Data    ####
-#-------------------------------------------#
-
-## Read in the data and format for running through Kate's function
-
-## Great Meadow 
-gmwell <- tibble(read.csv("data/processed_data/great_meadow_well_data_2024_20250715.csv")) %>% 
-  rename(Date = date, Year = year, precip_cm = precip.cm) %>% 
-  select(timestamp, Date, doy, Year, precip_cm, water.depth, lag.precip, hr, doy_h, plot.num) %>% 
-  mutate(timestamp = as_datetime(timestamp),
-         water.depth = ifelse(Year == 2016 & doy_h == 159.12 & plot.num == 3 & 
-                                water.depth < -120, NA, water.depth),
-         water.depth = ifelse(Year == 2017 & doy_h == 215.02 & plot.num == 6 & 
-                                water.depth < -115, NA, water.depth),
-         water.depth = ifelse(Year == 2021 & plot.num == 3 & doy == 224 &
-                                water.depth > 400, NA, water.depth),
-         water.depth = ifelse(Year == 2021 & plot.num == 3 & doy == 225 &
-                                water.depth > 400, NA, water.depth))
-
-
-## Gilmore Meadow
-gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv")) %>% 
-  rename(gilmore.meadow = GILM_WL)
 
 
 #-------------------------------------------#
