@@ -15,7 +15,7 @@ library(sf)
 
 #Reading in CSVs as a tibble
 
-## 2015-2023 Glen Veg data ##
+## 2015-2023 FOA/Glen veg data ##
 
 species_by_strata_2015 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_data/species_by_strata_2015_2023.csv") %>%
   as_tibble()
@@ -41,7 +41,7 @@ RAM_stressors_2015 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_data/RAM
 AA_char_2015 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_data/AA_char_2015_2023.csv")
 
 
-## 2024 Glen Veg data ##
+## 2024 FOA/Glen veg data ##
 
 species_by_strata_2024 <- read.csv("data/raw_data/Glen_veg_data/old_raw_veg_data/species_by_strata_2024.csv") %>%
   as_tibble()
@@ -75,7 +75,7 @@ sites <- read.csv("data/raw_data/monitoring_sites_GRME_GIME_metadata.csv")
 
 #### 2013-2015 Glen Veg data ####
 
-## combine tlu_Plant with species.list by common columns------------------------
+## combine tlu_Plant with species_list by common columns------------------------
 
 #first find latin names that are in species_list and not in tlu_Plant
 latin_mismatch_list <- anti_join(species_list_2015, tlu_Plant, by = "Latin_Name")

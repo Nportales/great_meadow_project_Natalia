@@ -18,7 +18,7 @@ library(ggplot2)
 
 #Reading in CSVs as a tibble
 
-## 2015-2024 Glen Veg data ##
+## FOA/Glen Veg data ##
 
 VMMI_FOA <- read.csv("data/processed_data/FOA_VMMI_2015_2024.csv") %>%
   as_tibble()
@@ -26,7 +26,7 @@ VMMI_FOA <- read.csv("data/processed_data/FOA_VMMI_2015_2024.csv") %>%
 spplist_FOA <- read.csv("data/processed_data/FOA_species_list_2015_2024.csv") %>%
   as_tibble()
 
-## Kate Veg data ##
+## NETN/Kate Veg data ##
 
 VMMI_NETN <- read.csv("data/processed_data/NETN_vegMMI_allsites_2011-2024.csv") %>%
   as_tibble()
