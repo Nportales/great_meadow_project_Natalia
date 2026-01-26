@@ -23,7 +23,7 @@ new_spplist <- read.csv("data/processed_data/ACAD_Wetland_Species_List_20251215.
 
 old_spplist <- read.csv("data/processed_data/FOA_NETN_species_list_2011_2024.csv")
 
-new_VMMI <- read.csv("data/processed_data/ACAD_Wetland_VegMMI_20251215.csv") %>%
+new_vmmi <- read.csv("data/processed_data/ACAD_Wetland_VegMMI_20251215.csv") %>%
   as_tibble()
 
 old_vmmi <- read.csv("data/processed_data/FOA_NETN_VMMI_2011_2024.csv")
@@ -70,10 +70,14 @@ qa_check_coords <- function(df, sites_df) {
 ####    Data Manip   #### 
 #-----------------------#
 
-# format new data to merge with existing data
+## species list data -----------------------------------------------------------
 
 # FOA new spplist data 
+# format new data to merge with existing data
 new_spplist_clean <- new_spplist %>% 
+  
+  # filter for only new year of data
+  filter(Year == 2025) %>% 
   
   mutate(
     
@@ -135,15 +139,11 @@ new_spplist_clean <- new_spplist %>%
 spplist_new_old <- bind_rows(new_spplist_clean, old_spplist) %>% 
 select(site.name, local.id, site.type, year, latitude, longitude, everything())
 
-
-
-
-
-# write.csv(spplist_corrected, "data/processed_data/FOA_NETN_species_list_2011_2024.csv", row.names = FALSE)
+# write.csv(spplist_corrected, "data/processed_data/FOA_NETN_species_list_2011_2025.csv", row.names = FALSE)
 
 ## species list table for pop-up on arcgis map
 
-spplist_arcgis <- spplist_corrected %>%
+spplist_arcgis <- spplist_new_old %>%
   group_by(site.name, latin.name, common.name, invasive) %>%
   summarize(
     years.observed = paste(sort(unique(year)), collapse = ", "),
@@ -154,5 +154,76 @@ spplist_arcgis <- spplist_corrected %>%
   )
 
 # export for joining to spatial data
-# write.csv(spplist_arcgis, "data/processed_data/species_list_arcgis.csv", row.names = FALSE)
+# write.csv(spplist_arcgis, "data/processed_data/species_list_arcgis_2011_2025.csv", row.names = FALSE)
+
+
+## VMMI data -------------------------------------------------------------------
+
+## FOA VMMI data 
+new_vmmi_clean <- new_vmmi %>% 
+  
+  # filter for only new year of data
+  filter(Year == 2025) %>% 
+  
+  mutate(
+    
+    # add a site type column
+    site.type = 
+      case_when(
+        grepl("GRME01", Code) ~ "Intensive",
+        grepl("GRME02", Code) ~ "Intensive",
+        grepl("GRME03", Code) ~ "Intensive",
+        grepl("GRME04", Code) ~ "Intensive",
+        grepl("GRME05", Code) ~ "Intensive",
+        grepl("GRME06", Code) ~ "Intensive",
+        grepl("GRME07", Code) ~ "RAM",
+        grepl("GRME08", Code) ~ "RAM",
+        grepl("GRME09", Code) ~ "RAM",
+        grepl("GRME10", Code) ~ "RAM",
+        grepl("GIME", Code) ~ "RAM",
+        TRUE ~ NA_character_),
+    
+    # add wetland column
+    wetland = 
+      case_when(
+        grepl("GRME", Code) ~ "Great Meadow",
+        grepl("GIME", Code) ~ "Gilmore Meadow",
+        TRUE ~ NA_character_),
+    
+    # add a source column
+    source = "FOA",
+    
+    # correct column class
+    Location_ID = as.character(Location_ID)
+    
+  ) %>% 
+  
+  # convert coordinates to lat and long  
+  utm_to_latlon() %>% 
+  
+  # Remove unneeded columns and rename to standardize 
+  select(site.name = Code,
+         local.id = Location_ID,
+         site.type,
+         year = Year,
+         latitude,
+         longitude,
+         mean.coc = meanC,
+         inv.cov = Invasive_Cover,
+         bryo.cov = Bryophyte_Cover,
+         strtol.cov = Cover_Tolerant,
+         vmmi,
+         vmmi.rating = vmmi_rating,
+         wetland,
+         source)
+
+# merge new and existing VMMI datasets
+vmmi_new_old <- bind_rows(new_vmmi_clean, old_vmmi) %>% 
+  select(site.name, local.id, site.type, year, latitude, longitude, everything())
+
+# Save outputs as CSV
+# write.csv(vmmi_corrected, "data/processed_data/FOA_NETN_VMMI_2011_2025.csv", row.names = FALSE)
+
+
+
 
