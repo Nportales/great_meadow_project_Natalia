@@ -1,5 +1,4 @@
-## Big cleaning of the Great Meadow and the Gilmore Meadow well data
-## Schoodic Institute at Acadia National Park
+#### Cleaning Great Meadow and the Gilmore Meadow Well Data ####
 
 #------------------------------------------------#
 ####                Packages                  ####
@@ -151,28 +150,42 @@ clean <- combined %>%
 
 
 ## Write out the clean data
-# write.csv(clean, "data/processed_data/hydrology_data/gm_well_data_2025_20260120.csv", row.names = F)
+# write.csv(clean, "data/processed_data/hydrology_data/gm_well_data_2025_20260127.csv", row.names = F)
 
 
 
 ################  GILMORE MEADOW  ################
 
-
 #------------------------------------------------#
 ####             Read and Clean               ####
 #------------------------------------------------#
 
-gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv")) %>% 
+gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2025.csv")) %>% 
   select(1,2,3,4,5,8,14,15,16) %>% 
   rename_with(tolower) %>% 
-  mutate(timestamp = parse_date_time(timestamp, orders = c("mdy HM", "mdy")),
-         date = mdy(date)) %>% 
+  mutate(timestamp = parse_date_time(timestamp, orders = c("mdy HM", "mdy", "ymd HMS", "ymd")),
+         date = as.Date(parse_date_time(date, orders = c("ymd", "mdy", "dmy")))
+  ) %>% 
   select(1,2,4,3,8,5,7,6) %>% 
   rename(precip.cm = precip_cm, water.depth = gilm_wl)
 
 
 ## Write out the clean data
-# write.csv(gilm, "data/processed_data/hydrology_data/gl_well_data_2024_20250612.csv", row.names = F)
+write.csv(gilm, "data/processed_data/hydrology_data/gl_well_data_2025_20260127.csv", row.names = F)
 
 
+
+
+
+
+## GRAVEYARD ##
+
+## old gilmore meadow wl data processing
+# gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2025.csv")) %>% 
+#   select(1,2,3,4,5,8,14,15,16) %>% 
+#   rename_with(tolower) %>% 
+#   mutate(timestamp = parse_date_time(timestamp, orders = c("mdy HM", "mdy")),
+#          date = mdy(date)) %>% 
+#   select(1,2,4,3,8,5,7,6) %>% 
+#   rename(precip.cm = precip_cm, water.depth = gilm_wl)
 

@@ -16,7 +16,7 @@ library(lubridate)
 ## Read in the data and format for running through Kate's function
 
 ## Great Meadow 
-gmwell <- tibble(read.csv("data/processed_data/great_meadow_well_data_2024_20250715.csv")) %>% 
+gmwell <- tibble(read.csv("data/processed_data/hydrology_data/gm_well_data_2025_20260127.csv")) %>% 
   rename(Date = date, Year = year, precip_cm = precip.cm) %>% 
   select(timestamp, Date, doy, Year, precip_cm, water.depth, lag.precip, hr, doy_h, plot.num) %>% 
   mutate(timestamp = as_datetime(timestamp),
@@ -31,7 +31,7 @@ gmwell <- tibble(read.csv("data/processed_data/great_meadow_well_data_2024_20250
 
 
 ## Gilmore Meadow
-gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv")) %>% 
+gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2025.csv")) %>% 
   rename(gilmore.meadow = GILM_WL)
 
 
@@ -43,7 +43,9 @@ gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_201
 calc_WL_stats <- function(df, from = 2013, to = 2025) {
   
   EDT<-"America/New_York"
-  well_prp <- df %>% mutate(timestamp = as.POSIXct(timestamp, format = "%m/%d/%Y %H:%M"),
+  well_prp <- df %>% mutate(timestamp = as.POSIXct(timestamp, 
+                                                   orders = c("mdy HM", "mdy HMS", "ymd HM", 
+                                                              "ymd HMS", "dmy HM", "dmy HMS")),
                             month = lubridate::month(timestamp),
                             mon = months(timestamp, abbreviate = T)) %>%
     filter(doy > 134 & doy < 275) %>% droplevels()
@@ -144,11 +146,12 @@ wl_stats <- bind_rows(gm_wl_stats, gil_wl_stats) %>%
 wl_table <- wl_stats %>% 
   pivot_longer(cols = WL_mean:prop_under_neg30cm) %>% 
   pivot_wider(names_from = site, values_from = value) %>% 
-  select(year = Year, stat = name, gilmore.meadow, everything())
+  select(year = Year, stat = name, gilmore.meadow, great.meadow.1, great.meadow.2,
+         great.meadow.3, great.meadow.4, great.meadow.5, great.meadow.6)
 
 
 ## Write out the water level stats
-# write_csv(wl_table, "data/processed_data/hydrology_data/gm_gl_wl_stats_2025_20260121.csv")
+# write_csv(wl_table, "data/processed_data/hydrology_data/gm_gl_wl_stats_2025_20260127.csv")
 
 
 
