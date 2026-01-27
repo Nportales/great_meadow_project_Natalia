@@ -1,4 +1,4 @@
-#### Hydrograph Visualizer Shiny Dashboard #### 
+#### Hydrology R Shiny Dashboard #### 
 
 #---------------------------------------------#
 ####        Load Required Packages         ####
@@ -17,7 +17,7 @@ library(bslib)
 #-------------------------------------------#
 
 # Great Meadow data
-gm <- read.csv("data/processed_data/great_meadow_well_data_2024_20250915.csv") %>%
+gm <- read.csv("data/processed_data/hydrology_data/gm_well_data_2025_20260127.csv") %>%
   mutate(date = as.Date(date),
          timestamp = as_datetime(timestamp),
          site = paste("Great Meadow", plot.num),
