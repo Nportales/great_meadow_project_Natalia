@@ -31,16 +31,10 @@ gm <- read.csv("data/processed_data/hydrology_data/gm_well_data_2025_20260127.cs
          siteyear = paste(site, year, sep = "_"))
 
 # Gilmore Meadow data 
-gl <- read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_2013-2024.csv") %>%
-  rename(water.depth = GILM_WL) %>%
-  mutate(
-    site = "Gilmore Meadow",
-    timestamp_parsed = coalesce(mdy_hm(timestamp), mdy(timestamp)),
-    timestamp = as.POSIXct(timestamp_parsed),
-    Date = mdy(Date)
-  ) %>%
-  select(timestamp, date = Date, doy, year = Year, precip.cm = precip_cm,
-         water.depth, lag.precip, hr, doy_h, site)
+gl <- read.csv("data/processed_data/hydrology_data/gl_well_data_2025_20260127.csv") %>%
+  mutate(date = as.Date(date),
+         timestamp = as_datetime(timestamp),
+         site = "Gilmore Meadow")
 
 # Create precipitation lookup and combine datasets
 gm_precip_lookup <- gm %>% select(timestamp, precip.cm, lag.precip) %>% distinct()
@@ -56,12 +50,12 @@ gl_with_gm_precip <- gl %>%
 
 # Combine datasets
 all_data <- bind_rows(gm, gl_with_gm_precip) %>% 
-  filter(year >= 2016 & year <= 2024) %>% 
+  filter(year >= 2016 & year(Sys.Date())) %>% 
   select(timestamp, date, year, doy, hr, doy_h, precip_cm = precip.cm,
          lag_precip = lag.precip, water_depth = water.depth, site)
 
 # Water level stats
-wl_stats <- read.csv("data/processed_data/gm_gl_wl_stats.csv") %>% 
+wl_stats <- read.csv("data/processed_data/hydrology_data/gm_gl_wl_stats_2025_20260127.csv") %>% 
   select(year, stat, `Gilmore Meadow` = gilmore.meadow, 
          `Great Meadow 1` = great.meadow.1, `Great Meadow 2` = great.meadow.2, 
          `Great Meadow 3` = great.meadow.3, `Great Meadow 4` = great.meadow.4, 
