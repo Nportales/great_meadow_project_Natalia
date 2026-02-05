@@ -45,28 +45,28 @@ library(dplyr)
 
 #Reading in CSVs as a tibble
 
-## 2015-2015 Glen Veg data ##
+## 2015-2025 Glen Veg data ##
 
-species_by_strata <- read.csv("data/raw_data/vegetation_data/Glen_veg_data/species_by_strata_2015_2024.csv") %>%
+species_by_strata <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/species_by_strata_2015_2025.csv") %>%
   as_tibble()
 
-species_list <- read.csv("data/raw_data/vegetation_data/Glen_veg_data/species_list_2015_2024.csv") %>%
+species_list <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/species_list_2015_2025.csv") %>%
   as_tibble()
 
-locations <- read.csv("data/raw_data/vegetation_data/Glen_veg_data/locations_2024_clean.csv") %>%
+locations <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/locations.csv") %>%
   as_tibble()
 
-visits <- read.csv("data/raw_data/vegetation_data/Glen_veg_data/visits_2015_2024.csv") %>%
+visits <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/visits_2015_2025.csv") %>%
   as_tibble()
 
-tlu_Plant <- read.csv("data/raw_data/vegetation_data/Glen_veg_data/tlu_Plant.csv") %>%
+tlu_Plant <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/tlu_Plant.csv") %>%
   as_tibble()
 
 #--------------------------#
 ####    Run Function    ####
 #--------------------------#
 
-sumSpeciesList <- function(site = "all", panel = -1, years = 2015:2024,
+sumSpeciesList <- function(site = "all", panel = -1, years = 2015:2025,
                            QAQC = FALSE, species_type = "all", include_protected = T){
 
   #---- Error Handling ----
@@ -130,9 +130,7 @@ sumSpeciesList <- function(site = "all", panel = -1, years = 2015:2024,
 species_list_result <- sumSpeciesList()
 print(species_list_result)
 
-species_list_final <- species_list_result %>% 
-  mutate(Site = ifelse(grepl("GIME", Code), "Gilmore Meadow", "Great Meadow"))
 
 # Save outputs as CSV
-# write.csv(species_list_final, "data/processed_data/FOA_species_list_2015_2024.csv", row.names = FALSE)
+# write.csv(species_list_result, "data/processed_data/vegetation_data/FOA_species_list_2015_2025.csv", row.names = FALSE)
 
