@@ -37,7 +37,7 @@ RAM_stressors_2015 <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/old_r
 
 AA_char_2015 <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/old_raw_veg_data/AA_char_2015_2023.csv")
 
-tlu_Plant <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/tlu_Plant.csv") %>%
+tlu_Plant <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/old_raw_veg_data/tlu_Plant.csv") %>%
   as_tibble()
 
 ## 2024 FOA/Glen veg data ##
