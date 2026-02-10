@@ -8,6 +8,7 @@ library(tidyverse)
 library(dplyr)
 library(lubridate)
 library(sf)
+library(stringr)
 
 #-----------------------#
 ####    Read Data    ####
@@ -102,7 +103,7 @@ sites <- read.csv("data/raw_data/monitoring_sites_GRME_GIME_metadata.csv")
 latin_mismatch_list <- anti_join(species_list_2015, tlu_Plant, by = "Latin_Name")
 
 #search tlu for mismatch latin names
-search_tlu <- filter(tlu_Plant, Latin_Name == "Utricularua vulgaris")
+search_tlu <- filter(tlu_Plant, Latin_Name == "Solidago altissima")
 
 #rename latin name species using case_when
 species_list_clean <- species_list_2015 %>% 
@@ -414,15 +415,18 @@ latin_name_issues <- bind_rows(
 )
 
 #search tlu for mismatch latin names
-search_tlu <- filter(tlu_Plant_new, Latin_Name == "Rubus canadensis")
-search_tlu_tsn <- filter(tlu_Plant_new, TSN_Accepted == "28562")
+search_tlu <- filter(tlu_Plant_new, Latin_Name == "Solidago canadensis")
+search_tlu_tsn <- filter(tlu_Plant_new, TSN_Accepted == "39665")
+search_tlu <- tlu_Plant_new %>%
+  filter(str_detect(Latin_Name, "Viburnum"))
+search_data <- filter(species_list_2015_2025, Latin_Name == "Viburnum dilatatum")
 
 #search tlu for mismatch latin names
 search_list <- filter(species_list_2015_2025, Accepted_Latin_Name == "Utricularia vulgaris")
 
 
 # TSN is NA or missing
-find_bad_tsn <- function(data, tsn_col, latin_col, dataset_name) {
+find_bad_tsn <- function(data, tsn_col, latin_col, year_col, dataset_name) {
   
   data %>%
     mutate(TSN_check = {{ tsn_col }}) %>%
@@ -432,6 +436,7 @@ find_bad_tsn <- function(data, tsn_col, latin_col, dataset_name) {
     ) %>%
     transmute(
       dataset = dataset_name,
+      Year = {{ year_col }},
       TSN = TSN_check,
       Latin_Name = {{ latin_col }}
     )
@@ -441,6 +446,7 @@ bad_tsn_strata <- find_bad_tsn(
   species_by_strata_2015_2025,
   TSN,
   Latin_Name,
+  Year,
   "species_by_strata_2015_2025"
 )
 
@@ -448,6 +454,7 @@ bad_tsn_list <- find_bad_tsn(
   species_list_2015_2025,
   TSN,
   Latin_Name,
+  Year,
   "species_list_2015_2025"
 )
 
