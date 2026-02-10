@@ -20,18 +20,18 @@ library(ggplot2)
 
 ## FOA/Glen Veg data ##
 
-VMMI_FOA <- read.csv("data/processed_data/FOA_VMMI_2015_2024.csv") %>%
+VMMI_FOA <- read.csv("data/processed_data/vegetation_data/FOA_VMMI_2015_2025.csv") %>%
   as_tibble()
 
-spplist_FOA <- read.csv("data/processed_data/FOA_species_list_2015_2024.csv") %>%
+spplist_FOA <- read.csv("data/processed_data/vegetation_data/FOA_species_list_2015_2025.csv") %>%
   as_tibble()
 
 ## NETN/Kate Veg data ##
 
-VMMI_NETN <- read.csv("data/processed_data/NETN_vegMMI_allsites_2011-2024.csv") %>%
+VMMI_NETN <- read.csv("data/processed_data/vegetation_data/NETN_vegMMI_allsites_2011-2025.csv") %>%
   as_tibble()
 
-spplist_NETN <- read.csv("data/processed_data/NETN_spplist_allsites_2011-2024_public.csv") %>% 
+spplist_NETN <- read.csv("data/processed_data/vegetation_data/NETN_spplist_allsites_2011-2025_public.csv") %>% 
   as_tibble()
 
 ## sites data ##
@@ -206,7 +206,7 @@ qa_vmmi <- qa_check_coords(VMMI_FOA_NETN, monitoring_sites)
   
 
 # Save outputs as CSV
-# write.csv(vmmi_corrected, "data/processed_data/FOA_NETN_VMMI_2011_2024.csv", row.names = FALSE)
+# write.csv(vmmi_corrected, "data/processed_data/FOA_NETN_VMMI_2011_2025.csv", row.names = FALSE)
 
 
 ## merge FOA spplist data with NETN spplist data ------------------------------------
