@@ -41,7 +41,7 @@ AA_char_2015 <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/old_raw_veg
 tlu_Plant <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/old_raw_veg_data/tlu_Plant.csv") %>%
   as_tibble()
 
-## 2024 FOA/Glen veg data ##
+## 2024-new FOA/Glen veg data ##
 
 species_by_strata_new <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/ACAD_Wetland_RAM_Data_20260129_public/species_by_strata.csv") %>%
   as_tibble()
