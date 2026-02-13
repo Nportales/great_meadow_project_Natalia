@@ -236,7 +236,7 @@ tsn_mismatch_rows <- bind_rows(
 )
 
 
-# tsn function 
+## tsn function ##--------------------------------------------------------------
 find_tsn_origin_rows <- function(df_a,
                                  df_b,
                                  tsn_col = TSN,
@@ -291,13 +291,43 @@ tsn_results <- find_tsn_origin_rows(
   label_b = "tlu_Plant_NETN"
 )
 
+tsn_results_FOA <- find_tsn_origin_rows(
+  df_a = tlu_Plant_new,
+  df_b = tlu_Plant,
+  tsn_col = TSN,
+  label_a = "tlu_Plant_new",
+  label_b = "tlu_Plant"
+)
+
+tsn_results_old_FOA_NETN <- find_tsn_origin_rows(
+  df_a = tlu_Plant,
+  df_b = tlu_Plant_NETN,
+  tsn_col = TSN,
+  label_a = "tlu_Plant",
+  label_b = "tlu_Plant_NETN"
+)
+
 tsn_results$tsn_origin   # TSN → which dataset it comes from
 tsn_results$rows         # full rows for those TSNs
+
+tsn_results_FOA$tsn_origin   
+tsn_results_FOA$rows
+
+tsn_results_old_FOA_NETN$tsn_origin   
+tsn_results_old_FOA_NETN$rows
 
 #search tlu for tsn
 search_tlu_new <- filter(tlu_Plant_new, TSN == "29062")
 search_tlu_NETN <- filter(tlu_Plant_NETN, TSN == "29062")
 search_tlu <- filter(tlu_Plant, TSN == "29062")
+
+
+
+
+
+
+
+
 
 ## Quality control check-point code ## -----------------------------------------
 
