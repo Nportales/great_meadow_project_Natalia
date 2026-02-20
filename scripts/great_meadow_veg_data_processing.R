@@ -265,7 +265,7 @@ species_list_2015_2025 <- bind_rows(
 ) %>% format_dates(Date)
 
 # Locations
-locations_new_clean <- locations %>% 
+locations_clean <- locations %>% 
   fix_coordinates("GRME02", 563071, 4913162, 44.36899, -68.20840) %>% 
   fix_coordinates("GRME08", 563371, 4912986, 44.36738, -68.20466) %>%
   format_dates(Date_Established)
@@ -293,13 +293,22 @@ AA_char_2015_2025 <- safe_bind_rows(AA_char_2015, AA_char_new) %>%
   format_dates(Date)
 
 # Save outputs as CSV
-# write.csv(species_by_strata_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/species_by_strata_2015_2025.csv", row.names = FALSE)
-# write.csv(species_list_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/species_list_2015_2025.csv", row.names = FALSE)
-# write.csv(locations, "data/raw_data/vegetation_data/FOA_veg_data/locations.csv", row.names = FALSE)
-# write.csv(visits_2015_2025, "data/raw_data//vegetation_data/FOA_veg_data/visits_2015_2025.csv", row.names = FALSE)
-# write.csv(RAM_stressors_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/RAM_stressors_2015_2025.csv", row.names = FALSE)
-# write.csv(vertical_complexity_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/vertical_complexity_2015_2025.csv", row.names = FALSE)
-# write.csv(AA_char_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/AA_char_2015_2025.csv", row.names = FALSE)
+# write.csv(species_by_strata_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/species_by_strata_2015_2025.csv", row.names = FALSE)
+# write.csv(species_list_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/species_list_2015_2025.csv", row.names = FALSE)
+# write.csv(locations_clean, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/locations.csv", row.names = FALSE)
+# write.csv(visits_2015_2025, "data/raw_data//vegetation_data/FOA_veg_data/FOA_veg_data_2025/visits_2015_2025.csv", row.names = FALSE)
+# write.csv(RAM_stressors_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/RAM_stressors_2015_2025.csv", row.names = FALSE)
+# write.csv(vertical_complexity_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data_2025/FOA_veg_data/vertical_complexity_2015_2025.csv", row.names = FALSE)
+# write.csv(AA_char_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/AA_char_2015_2025.csv", row.names = FALSE)
+
+# save cleaned 2015-2023 data as CSV
+# write.csv(species_by_strata_tlu, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2023/species_by_strata_2015_2023.csv", row.names = FALSE)
+# write.csv(species_list_tlu, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2023/species_list_2015_2023.csv", row.names = FALSE)
+# write.csv(locations_clean, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2023/locations.csv", row.names = FALSE)
+# write.csv(visits_2015_clean_2, "data/raw_data//vegetation_data/FOA_veg_data/FOA_veg_data_2023/visits_2015_2023.csv", row.names = FALSE)
+# write.csv(RAM_stressors_2015, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2023/RAM_stressors_2015_2023.csv", row.names = FALSE)
+# write.csv(vertical_complexity_2015, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2023/vertical_complexity_2015_2023.csv", row.names = FALSE)
+# write.csv(AA_char_2015, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2023/AA_char_2015_2023.csv", row.names = FALSE)
 
 
 #### change coordinates for site data ####--------------------------------------
