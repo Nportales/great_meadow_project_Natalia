@@ -17,7 +17,7 @@ library(bslib)
 #-------------------------------------------#
 
 # Great Meadow data
-gm <- read.csv("data/processed_data/hydrology_data/gm_well_data_2025_20260127.csv") %>%
+gm <- read.csv("data/processed_data/hydrology_data/great_meadow_well_data_2025_20260304.csv") %>%
   mutate(date = as.Date(date),
          timestamp = as_datetime(timestamp),
          site = paste("Great Meadow", plot.num),
@@ -55,7 +55,7 @@ all_data <- bind_rows(gm, gl_with_gm_precip) %>%
          lag_precip = lag.precip, water_depth = water.depth, site)
 
 # Water level stats
-wl_stats <- read.csv("data/processed_data/hydrology_data/gm_gl_wl_stats_2025_20260127.csv") %>% 
+wl_stats <- read.csv("data/processed_data/hydrology_data/gm_gl_wl_stats_2025_20260304.csv") %>% 
   select(year, stat, `Gilmore Meadow` = gilmore.meadow, 
          `Great Meadow 1` = great.meadow.1, `Great Meadow 2` = great.meadow.2, 
          `Great Meadow 3` = great.meadow.3, `Great Meadow 4` = great.meadow.4, 
@@ -242,7 +242,8 @@ ui <- page_fluid(
                               none_text = "Choose site(s)"),
           
           create_picker_input("year", "Select Year(s):", 
-                              unique(all_data$year), 2024,
+                              unique(all_data$year), 
+                              selected = max(all_data$year),
                               none_text = "Choose year(s)"),
           
           br(),
@@ -295,7 +296,7 @@ ui <- page_fluid(
           
           create_picker_input("stats_year", "Select Years:", 
                               unique(wl_stats$year), 
-                              c(2024, 2023, 2022, 2021),
+                              selected = tail(sort(unique(wl_stats$year)), 4),
                               none_text = "Choose year(s)"),
           
           radioButtons("time_summary", "Summarize Water Level Statistics By:",
