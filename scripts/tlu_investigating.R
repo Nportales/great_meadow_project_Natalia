@@ -397,14 +397,16 @@ latin_name_issues <- bind_rows(
 )
 
 #search tlu for mismatch latin names
-search_tlu <- filter(tlu_Plant_new, Latin_Name == "Solidago canadensis")
+search_tlu <- filter(tlu_Plant_new, Genus == "Nuphar")
 search_tlu_tsn <- filter(tlu_Plant_new, TSN_Accepted == "39665")
 search_tlu <- tlu_Plant_new %>%
-  filter(str_detect(Latin_Name, "Viburnum"))
+  filter(str_detect(Latin_Name, "Nuphar"))
 search_data <- filter(species_list_2015_2025, Latin_Name == "Viburnum dilatatum")
 
 #search tlu for mismatch latin names
-search_list <- filter(species_list_2015_2025, Accepted_Latin_Name == "Utricularia vulgaris")
+search_list <- filter(species_list_2015_2025, Latin_Name == "Rhamnus alnifolia")
+search_list_2 <- filter(species_list_2015_2025, Latin_Name == "Rhamnus frangula")
+search_strata <- filter(species_by_strata_2015_2025, Latin_Name == "Solidago altissima")
 
 
 # TSN is NA or missing
