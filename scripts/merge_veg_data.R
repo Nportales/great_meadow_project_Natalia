@@ -34,6 +34,10 @@ VMMI_NETN <- read.csv("data/processed_data/vegetation_data/NETN_vegMMI_allsites_
 spplist_NETN <- read.csv("data/processed_data/vegetation_data/NETN_spplist_allsites_2011-2025_public.csv") %>% 
   as_tibble()
 
+## tlu_Plant ##
+
+tlu_Plant <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/tlu_Plant.csv")
+
 ## sites data ##
 
 monitoring_sites <- read.csv("data/processed_data/monitoring_sites.csv") %>% as_tibble()
@@ -203,10 +207,7 @@ qa_vmmi <- qa_check_coords(VMMI_FOA_NETN, monitoring_sites)
            vmmi.rating,
            wetland,
            source = source.data)
-  
 
-# Save outputs as CSV
-# write.csv(vmmi_corrected, "data/processed_data/FOA_NETN_VMMI_2011_2025.csv", row.names = FALSE)
 
 
 ## merge FOA spplist data with NETN spplist data ------------------------------------
@@ -354,13 +355,125 @@ qa_spplist <- qa_check_coords(clean_spplist_FOA_NETN, monitoring_sites)
            coc.wetness,
            wetland,
            source = source.data)
+
+
+#---------------------------#
+####    QA/QC Checking   ####
+#---------------------------#
+  
+## function for identifying TSN-latin name mismatches (between new tlu_Plant dataset and spplist datasets) for taxonomic consistency
+check_tsn_latin_mismatch <- function(reference_df,
+                                       compare_dfs,
+                                       tsn_ref,
+                                       latin_ref,
+                                       tsn_comp,
+                                       latin_comp,
+                                       reference_label = "tlu_Plant",
+                                       compare_labels,
+                                       drop_invalid_tsn = TRUE) {
+    
+    tsn_ref   <- rlang::enquo(tsn_ref)
+    latin_ref <- rlang::enquo(latin_ref)
+    tsn_comp  <- rlang::enquo(tsn_comp)
+    latin_comp<- rlang::enquo(latin_comp)
+    
+    prep_ref <- function(df) {
+      df %>%
+        select(TSN = !!tsn_ref, Latin_Name = !!latin_ref) %>%
+        distinct() %>%
+        mutate(dataset = reference_label)
+    }
+    
+    prep_comp <- function(df, label) {
+      df %>%
+        select(TSN = !!tsn_comp, Latin_Name = !!latin_comp) %>%
+        distinct() %>%
+        mutate(dataset = label)
+    }
+    
+    ref <- prep_ref(reference_df)
+    comps <- purrr::map2_dfr(compare_dfs, compare_labels, prep_comp)
+    
+    all_data <- bind_rows(ref, comps)
+    
+    if (drop_invalid_tsn) {
+      all_data <- all_data %>%
+        filter(!is.na(TSN) & TSN > 0)
+    }
+    
+    mismatches_long <- all_data %>%
+      group_by(TSN) %>%
+      filter(n_distinct(Latin_Name) > 1) %>%
+      ungroup()
+    
+    mismatches_wide <- mismatches_long %>%
+      tidyr::pivot_wider(
+        names_from = dataset,
+        values_from = Latin_Name
+      )
+    
+    list(
+      long = mismatches_long,
+      wide = mismatches_wide
+    )
+  }
+  
+## run functions
+tsn_latin_results <- check_tsn_latin_mismatch(
+  reference_df  = tlu_Plant,
+  compare_dfs   = list(spplist_corrected),
+  compare_labels = "spplist_corrected",
+
+  tsn_ref   = TSN,
+  latin_ref = Latin_Name,
+
+  tsn_comp  = tsn,
+  latin_comp = latin.name
+)
+
+view(tsn_latin_results$long)   # long-format mismatches
+view(tsn_latin_results$wide)   # wide-format QA table
+
+## function for identifying species in veg dataset but not in tlu_Plant by TSN 
+find_veg_not_in_tlu <- function(veg_df,
+                                tlu_df,
+                                veg_tsn_col,
+                                veg_latin_col,
+                                tlu_tsn_col) {
+  
+  veg_tsn_col   <- rlang::enquo(veg_tsn_col)
+  veg_latin_col <- rlang::enquo(veg_latin_col)
+  tlu_tsn_col   <- rlang::enquo(tlu_tsn_col)
+  
+  veg_df %>%
+    select(
+      TSN = !!veg_tsn_col,
+      Latin_Name = !!veg_latin_col
+    ) %>%
+    distinct() %>%
+    anti_join(
+      tlu_df %>%
+        select(TSN = !!tlu_tsn_col) %>%
+        distinct(),
+      by = "TSN"
+    )
+}
+
+veg_not_in_tlu <- find_veg_not_in_tlu(
+  veg_df        = spplist_corrected,
+  tlu_df        = tlu_Plant,
+  veg_tsn_col   = tsn,
+  veg_latin_col = latin.name,
+  tlu_tsn_col   = TSN
+)
   
 
-
 # Save outputs as CSV
-# write.csv(spplist_corrected, "data/processed_data/FOA_NETN_species_list_2011_2024.csv", row.names = FALSE)
+# write.csv(spplist_corrected, "data/processed_data/FOA_NETN_species_list_2011_2025.csv", row.names = FALSE)
+# write.csv(vmmi_corrected, "data/processed_data/FOA_NETN_VMMI_2011_2025.csv", row.names = FALSE)
 
-
+ 
+  
 ## species list table for pop-up on arcgis map
 
 spplist_arcgis <- spplist_corrected %>%
@@ -376,47 +489,50 @@ spplist_arcgis <- spplist_corrected %>%
 # export for joining to spatial data
 # write.csv(spplist_arcgis, "data/processed_data/species_list_arcgis.csv", row.names = FALSE)
 
-## species list table for pop-up with lat and long
-spplist_arcgis_2 <- spplist_corrected %>%
-  group_by(site.name, latin.name, common.name, invasive) %>%
-  summarize(
-    years.observed = paste(sort(unique(year)), collapse = ", "),
-    site.type = first(site.type),
-    lat_vals  = n_distinct(latitude, na.rm = TRUE),
-    long_vals = n_distinct(longitude, na.rm = TRUE),
-    latitude  = first(latitude),
-    longitude = first(longitude),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    invasive = if_else(invasive, "Yes", "No"),
-    coord_warning = lat_vals > 1 | long_vals > 1) %>%
-  select(-lat_vals, -long_vals
-         ,-coord_warning)  # drop checks if you don't need them
-
-# export for joining to spatial data
-# write.csv(spplist_arcgis_2, "data/processed_data/species_list_arcgis_latlong.csv", row.names = FALSE)
-
-
-#### merge vmmi data with monitoring sites data
-
-# get most recent vmmi rating for each site
-vmmi_recent <- vmmi_corrected %>%
-  group_by(site.name) %>%
-  filter(year == max(year)) %>%
-  ungroup() %>%
-  select(site.name, vmmi.rating)
-
-# join to sites dataset
-sites_vmmi <- monitoring_sites %>%
-  left_join(vmmi_recent, by = "site.name")
-
-# Save outputs as CSV
-# write.csv(sites_vmmi, "data/processed_data/monitoring_sites_vmmi.csv", row.names = FALSE)
 
 
 
 #### GRAVEYARD ####-------------------------------------------------------------
+
+# ## species list table for pop-up with lat and long
+# spplist_arcgis_2 <- spplist_corrected %>%
+#   group_by(site.name, latin.name, common.name, invasive) %>%
+#   summarize(
+#     years.observed = paste(sort(unique(year)), collapse = ", "),
+#     site.type = first(site.type),
+#     lat_vals  = n_distinct(latitude, na.rm = TRUE),
+#     long_vals = n_distinct(longitude, na.rm = TRUE),
+#     latitude  = first(latitude),
+#     longitude = first(longitude),
+#     .groups = "drop"
+#   ) %>%
+#   mutate(
+#     invasive = if_else(invasive, "Yes", "No"),
+#     coord_warning = lat_vals > 1 | long_vals > 1) %>%
+#   select(-lat_vals, -long_vals
+#          ,-coord_warning)  # drop checks if you don't need them
+# 
+# # export for joining to spatial data
+# # write.csv(spplist_arcgis_2, "data/processed_data/species_list_arcgis_latlong.csv", row.names = FALSE)
+# 
+# 
+# #### merge vmmi data with monitoring sites data
+# 
+# # get most recent vmmi rating for each site
+# vmmi_recent <- vmmi_corrected %>%
+#   group_by(site.name) %>%
+#   filter(year == max(year)) %>%
+#   ungroup() %>%
+#   select(site.name, vmmi.rating)
+# 
+# # join to sites dataset
+# sites_vmmi <- monitoring_sites %>%
+#   left_join(vmmi_recent, by = "site.name")
+# 
+# # Save outputs as CSV
+# # write.csv(sites_vmmi, "data/processed_data/monitoring_sites_vmmi.csv", row.names = FALSE)
+
+
 
 
 # # get summary table

@@ -47,19 +47,19 @@ library(dplyr)
 
 ## 2015-2025 Glen Veg data ##
 
-species_by_strata <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/species_by_strata_2015_2025.csv") %>%
+species_by_strata <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/species_by_strata_2015_2025.csv") %>%
   as_tibble()
 
-species_list <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/species_list_2015_2025.csv") %>%
+species_list <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/species_list_2015_2025.csv") %>%
   as_tibble()
 
-locations <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/locations.csv") %>%
+locations <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/locations.csv") %>%
   as_tibble()
 
-visits <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/visits_2015_2025.csv") %>%
+visits <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/visits_2015_2025.csv") %>%
   as_tibble()
 
-tlu_Plant <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/tlu_Plant.csv") %>%
+tlu_Plant <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/tlu_Plant.csv") %>%
   as_tibble()
 
 #--------------------------#

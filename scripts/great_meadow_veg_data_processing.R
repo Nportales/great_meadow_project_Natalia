@@ -68,7 +68,7 @@ tlu_Plant_new <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/ACAD_Wetla
 
 ## site data ##
 
-sites <- read.csv("data/raw_data/monitoring_sites_GRME_GIME_metadata.csv")
+sites <- read.csv("data/monitoring_sites_GRME_GIME_metadata.csv")
 
 
 #-----------------------#
@@ -107,6 +107,8 @@ species_list_clean <- species_list_2015 %>%
                 Latin_Name == "Brachyelytum aristosum" ~ "Brachyelytrum aristosum",
                 Latin_Name == "Juncus pylaei" ~ "Juncus effusus",
                 Latin_Name == "Utricularia vulgaris" ~ "Utricularua vulgaris",
+                Latin_Name == "Rhamnus alnifolia" ~ "Rhamnus frangula",
+                Latin_Name == "Viburnum dilatatum" ~ "Viburnum dentatum",
                 TRUE ~ Latin_Name),
     
     # fill in panel column with -1
