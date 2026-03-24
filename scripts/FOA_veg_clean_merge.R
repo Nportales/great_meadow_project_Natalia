@@ -1,6 +1,6 @@
 #### FOA GRME/GIME Vegetation Data Cleaning and Merging Script ####
 
-## This script takes the old 2015-2023 FOA veg data and combines it with new FOA veg data (2024-new) for later processing
+## This script takes the old 2015-2023 FOA veg data and combines it with new FOA veg data (2024-new) for later processing and goes through a series of QA/QC checks and cleaning to ensure data consistency
 
 #---------------------------------------------#
 ####        Load Required Packages         ####
@@ -162,6 +162,8 @@ AA_char_2015_2025 <- safe_bind_rows(AA_char_2023, AA_char_new) %>%
 ####    QA/QC Checking   ####
 #---------------------------#
 
+## TSN-latin name mismatch ## --------------------------------------------------
+
 ## function for identifying TSN-latin name mismatches (between new tlu_Plant dataset and veg datasets) for taxonomic consistency
 check_tsn_latin_mismatch <- function(reference_df,
                                      compare_dfs,
@@ -228,7 +230,9 @@ tsn_latin_results <- check_tsn_latin_mismatch(
 # view(tsn_latin_results$wide)   # wide-format QA table
 
 
-## function for identifying species in veg datasets but not in tlu_Plant by TSN (potential species that need to be added to tlu_Plant)
+## Identify species/taxa missing from tlu_Plant ## -----------------------------
+
+## function for identifying species/taxa in veg datasets but not in new tlu_Plant dataset by TSN (potential species that need to be added to tlu_Plant)
 
 veg_tsn <- bind_rows(
   species_by_strata_2015_2025 %>%
@@ -242,6 +246,7 @@ veg_tsn <- bind_rows(
     mutate(source_dataset = "species_list_2015_2025")
 )
 
+# produce summary table of missing species
 veg_not_in_tlu <- veg_tsn %>%
   anti_join(
     tlu_Plant_new %>% select(TSN) %>% distinct(),
@@ -252,17 +257,21 @@ veg_not_in_tlu <- veg_tsn %>%
 # search_list <- filter(species_list_2015_2025, Latin_Name == "Rhamnus alnifolia")
 # search_strata <- filter(species_by_strata_2015_2025, Latin_Name == "Rhamnus alnifolia")
 # search_tlu <- filter(tlu_Plant_new, Latin_Name == "Solidago altissima")
+# search_tlu <- filter(tlu_Plant_new, Genus == "Thalictrum")
 # search_tlu_old <- filter(tlu_Plant, Latin_Name == "Solidago altissima")
 
 
+## Add missing species/taxa ## -------------------------------------------------
 
-## add missing valid species to tlu_Plant_new if new species are identified
+## add missing valid species/taxa to tlu_Plant_new if new species/taxa are identified
 ## Sources for gathering plant data include: 
 ## - Maine Floristic Quality Assessment - COC: https://www.maine.gov/dacf/mnap/features/coc.htm
 ## - ITIS: https://www.itis.gov/
 ## - USDA PLANTS Database: https://plants.usda.gov/
 ## - Maine Rare Plant List: https://www.maine.gov/dacf/mnap/features/rare_plants/plantlist.htm
+## species level data is pulled from the maine_coc dataset and manually added from the other sources. Genus level data is all added manually.
 
+## species 
 # pull species from maine_coc
 species_to_pull <- c(
   "Carex lenticularis",
@@ -275,7 +284,7 @@ species_to_pull <- c(
 maine_subset <- maine_coc %>%
   filter(Scientific.Name %in% species_to_pull)
 
-# convert Nativity → Exotic (TRUE / FALSE)
+# convert Nativity -> Exotic (TRUE / FALSE)
 maine_subset <- maine_subset %>%
   mutate(
     Exotic = case_when(
@@ -285,7 +294,7 @@ maine_subset <- maine_subset %>%
     )
   )
 
-# convert physiognomy → Boolean growth-form traits
+# convert physiognomy -> Boolean growth-form traits
 maine_subset <- maine_subset %>%
   mutate(
     Tree        = physiognomy == "tree",
@@ -296,7 +305,7 @@ maine_subset <- maine_subset %>%
     Herbaceous = physiognomy %in% c("forb", "grass", "sedge", "rush")
   )
 
-# create table with manualy added species info not included in maine_coc
+# create table with manually added species info not included in maine_coc
 manual_species_info <- tibble::tribble(
   ~Latin_Name,              ~Genus,     ~Order,        ~Species,        ~Subspecies, ~Rank_Name, ~Synonym,
   ~TSN,     ~TSN_Accepted, ~Accepted_Found, ~Invasive, ~Author,  ~Canopy_Exclusion, ~ACAD_ED, ~Protected_species, ~Aquatic, ~Moss_Lichen, 
@@ -351,6 +360,35 @@ species_to_add <- maine_subset %>%
     Coef_wetness        = coefficient.of.wetness
   )
 
+## genera 
+# pull species of genera that need to be added to tlu_Plant from maine_coc
+genus_species_to_pull <- c(
+  "Nuphar lutea ssp. advena",
+  "Nuphar lutea ssp. variegata",
+  "Thalictrum polygamum",
+  "Thalictrum pubescens"
+  # add more as needed
+)
+
+# filter maine_coc to just those species
+genus_maine_subset <- maine_coc %>%
+  filter(Scientific.Name %in% genus_species_to_pull)
+
+# calculate genus-level summaries
+genus_summary <- genus_maine_subset %>%
+  mutate(Genus = word(Scientific.Name, 1)) %>%
+  group_by(Genus) %>%
+  summarise(
+    mean_COC = round(mean(ecoreg_82_COC, na.rm = TRUE)),
+    n_species = n(),
+    
+    # keep wetness value only if all species share the same one
+    coef_wetness = if(n_distinct(coefficient.of.wetness, na.rm = TRUE) == 1)
+      first(coefficient.of.wetness)
+    else
+      NA
+  )
+
 # Create a table for any genus that needs to be manually added to tlu_Plant
 manual_genus_info <- tibble::tribble(
   ~Accepted_Latin_Name, ~Common, ~Family,          ~Genus,         ~Latin_Name,   ~Order,
@@ -380,16 +418,27 @@ manual_genus_info <- tibble::tribble(
   NA, "L.", NA, FALSE, NA
 )
 
+# fill in COC and COW values from maine.coc dataset
+manual_genus_info_filled <- manual_genus_info %>%
+  left_join(
+    genus_summary %>%
+      select(Genus, mean_COC, coef_wetness),
+    by = "Genus"
+  ) %>%
+  mutate(
+    CoC_ME_ACAD = coalesce(CoC_ME_ACAD, mean_COC),
+    Coef_wetness = coalesce(Coef_wetness, coef_wetness)
+  ) %>%
+  select(-mean_COC, -coef_wetness)
+
 # append to tlu_Plant_new
 tlu_Plant_new_updated <- bind_rows(
   tlu_Plant_new,
   species_to_add,
-  manual_genus_info
+  manual_genus_info_filled
 )
 
-# Save outputs as CSV
-# write.csv(tlu_Plant_new_updated, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/tlu_Plant.csv", row.names = FALSE)
-
+## add new gathered data into veg datasets ##-----------------------------------
 
 ## add missing species information to species_lists and species_by_strata datasets
 fill_from_tlu <- function(df, join_col_df, join_col_tlu) {
@@ -404,9 +453,11 @@ fill_from_tlu <- function(df, join_col_df, join_col_tlu) {
   tlu_cols <- names(df_joined)[endsWith(names(df_joined), ".tlu")]
   
   for (tlu_col in tlu_cols) {
+    
     base_col <- sub("\\.tlu$", "", tlu_col)
     
-    if (base_col %in% names(df_joined)) {
+    if (base_col %in% names(df)) {
+      
       df_joined[[base_col]] <- dplyr::coalesce(
         df_joined[[base_col]],
         df_joined[[tlu_col]]
@@ -415,7 +466,7 @@ fill_from_tlu <- function(df, join_col_df, join_col_tlu) {
   }
   
   df_joined %>%
-    select(-all_of(tlu_cols))
+    select(all_of(names(df)))
 }
 
 # fill-in species_lists
@@ -440,8 +491,7 @@ check_filled <- anti_join(
 )
 
 
-## find rows where TSN is NA or missing
-
+## optional check - find rows where TSN is NA or missing (should now only be bryophytes)
 species_list_missing_tsn <- species_lists_filled  %>%
   filter(is.na(TSN))
 
@@ -449,8 +499,10 @@ species_by_strata_missing_tsn <- species_by_strata_filled %>%
   filter(is.na(TSN))
 
 
+## comprehensive check ## ------------------------------------------------------
 
-## function for checking for any changes between FOA veg data and new tlu_Plant ##-----------
+## this function checks for any differences between FOA veg data and the new tlu_Plant dataset and fixes differences by overwriting FOA data with tlu_Plant data
+
 sync_with_tlu <- function(data, tlu, key = "TSN", verbose = TRUE) {
   
   
@@ -527,9 +579,8 @@ result_species <- sync_with_tlu(
   tlu_Plant_new_updated
 )
 
-  # # to see exactly what changed
-  # species_lists_filled_updated <- result_species$updated_data
-  # species_mismatches <- result_species$mismatches
+  species_lists_filled_updated <- result_species$updated_data
+  species_mismatches <- result_species$mismatches
 
 
 # update species_by_strata
@@ -538,17 +589,15 @@ result_strata <- sync_with_tlu(
   tlu_Plant_new_updated
 )
 
-  # # to see exactly what changed
-  # species_by_strata_updated <- result_strata$updated_data
-  # strata_mismatches <- result_strata$mismatches
+  species_by_strata_updated <- result_strata$updated_data
+  strata_mismatches <- result_strata$mismatches
 
-
-
-
+  
 
 # Save outputs as CSV
-# write.csv(result_species, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/species_by_strata_2015_2025.csv", row.names = FALSE)
-# write.csv(result_strata, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/species_list_2015_2025.csv", row.names = FALSE)
+# write.csv(tlu_Plant_new_updated, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/tlu_Plant.csv", row.names = FALSE)
+# write.csv(species_by_strata_updated, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/species_by_strata_2015_2025.csv", row.names = FALSE)
+# write.csv(species_lists_filled_updated, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/species_list_2015_2025.csv", row.names = FALSE)
 # write.csv(locations_clean, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/locations.csv", row.names = FALSE)
 # write.csv(visits_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/visits_2015_2025.csv", row.names = FALSE)
 # write.csv(RAM_stressors_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/RAM_stressors_2015_2025.csv", row.names = FALSE)
