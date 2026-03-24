@@ -16,14 +16,14 @@ library(ggplot2)
 ####    Read Data    ####
 #-----------------------#
 
-#Reading in CSVs as a tibble
+# Reading in CSVs as a tibble
 
 ## FOA/Glen Veg data ##
 
-VMMI_FOA <- read.csv("data/processed_data/vegetation_data/FOA_VMMI_2015_2025.csv") %>%
+VMMI_FOA <- read.csv("data/processed_data/vegetation_data/FOA_VMMI_2015_2025_20260310.csv") %>%
   as_tibble()
 
-spplist_FOA <- read.csv("data/processed_data/vegetation_data/FOA_species_list_2015_2025.csv") %>%
+spplist_FOA <- read.csv("data/processed_data/vegetation_data/FOA_species_list_2015_2025_20260310.csv") %>%
   as_tibble()
 
 ## NETN/Kate Veg data ##
@@ -361,7 +361,9 @@ qa_spplist <- qa_check_coords(clean_spplist_FOA_NETN, monitoring_sites)
 ####    QA/QC Checking   ####
 #---------------------------#
   
-## function for identifying TSN-latin name mismatches (between new tlu_Plant dataset and spplist datasets) for taxonomic consistency
+## 1: Taxonomic agreement across sources ##----------------------------------
+  
+## function for identifying TSN-latin name mismatches (between new tlu_Plant dataset and spplist dataset) for taxonomic consistency across data sources
 check_tsn_latin_mismatch <- function(reference_df,
                                        compare_dfs,
                                        tsn_ref,
@@ -431,10 +433,13 @@ tsn_latin_results <- check_tsn_latin_mismatch(
   latin_comp = latin.name
 )
 
-view(tsn_latin_results$long)   # long-format mismatches
-view(tsn_latin_results$wide)   # wide-format QA table
+# view(tsn_latin_results$long)   # long-format mismatches
+# view(tsn_latin_results$wide)   # wide-format QA table
 
-## function for identifying species in veg dataset but not in tlu_Plant by TSN 
+
+## 2: check for species missing from tlu_Plant ## ---------------------------
+
+## function for checking if there are any species in veg dataset but not in tlu_Plant by TSN 
 find_veg_not_in_tlu <- function(veg_df,
                                 tlu_df,
                                 veg_tsn_col,
@@ -466,15 +471,86 @@ veg_not_in_tlu <- find_veg_not_in_tlu(
   veg_latin_col = latin.name,
   tlu_tsn_col   = TSN
 )
+
+## check for data consistency with in dataset--------------------------------  
+## find any inconsistencies in merged data, summarize them, and correct them using tlu_Plant as authoritative table
+
+species_QA <- function(df, reference = NULL, fix = FALSE) {
   
+  species_cols <- c(
+    "latin.name",
+    "common.name",
+    "plant.code",
+    "invasive",
+    "protected",
+    "coc",
+    "coc.wetness"
+  )
+  
+  # ---- Step 1: identify inconsistencies ----
+  qa_results <- purrr::map_dfr(species_cols, function(col) {
+    
+    df %>%
+      dplyr::group_by(tsn) %>%
+      dplyr::filter(dplyr::n_distinct(.data[[col]], na.rm = TRUE) > 1) %>%
+      dplyr::mutate(problem_column = col) %>%
+      dplyr::ungroup()
+    
+  })
+  
+  # ---- Step 2: make corrections ----
+  if (fix && !is.null(reference)) {
+    
+    ref_clean <- reference %>%
+      dplyr::select(
+        tsn = TSN,
+        latin.name = Latin_Name,
+        common.name = Common,
+        plant.code = PLANTS_Code,
+        invasive = Invasive,
+        protected = Protected_species,
+        coc = CoC_ME_ACAD,
+        coc.wetness = Coef_wetness
+      )
+    
+    corrected_df <- df %>%
+      dplyr::select(-dplyr::all_of(species_cols)) %>%
+      dplyr::left_join(ref_clean, by = "tsn")
+    
+    return(list(
+      qa_table = qa_results,
+      corrected_data = corrected_df
+    ))
+    
+  } else {
+    
+    return(list(
+      qa_table = qa_results,
+      corrected_data = df
+    ))
+    
+  }
+}
+
+results_species_QA <- species_QA(
+  spplist_corrected,
+  reference = tlu_Plant,
+  fix = TRUE
+)
+
+# Step 1: identify inconsistencies
+QA_results <- results_species_QA$qa_table
+# Step 2: make corrections
+clean_spplist_corrected <- results_species_QA$corrected_data
+
 
 # Save outputs as CSV
 # write.csv(spplist_corrected, "data/processed_data/FOA_NETN_species_list_2011_2025.csv", row.names = FALSE)
 # write.csv(vmmi_corrected, "data/processed_data/FOA_NETN_VMMI_2011_2025.csv", row.names = FALSE)
 
- 
+
   
-## species list table for pop-up on arcgis map
+## species list table for pop-up on arcgis map ---------------------------------
 
 spplist_arcgis <- spplist_corrected %>%
   group_by(site.name, latin.name, common.name, invasive) %>%
