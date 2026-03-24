@@ -45,28 +45,34 @@ library(dplyr)
 
 #Reading in CSVs as a tibble
 
-## 2015-2025 Glen Veg data ##
+## 2012-new year merged FOA and NETN veg data ##
 
-species_by_strata <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/species_by_strata_2015_2025.csv") %>%
+species_by_strata <- read.csv("data/raw_data/vegetation_data/all_veg_data/species_by_strata_all_2012_2025.csv") %>%
   as_tibble()
 
-species_list <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/species_list_2015_2025.csv") %>%
+species_list <- read.csv("data/raw_data/vegetation_data/all_veg_data/species_list_all_2012_2025.csv") %>%
   as_tibble()
 
-locations <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/locations.csv") %>%
+locations <- read.csv("data/raw_data/vegetation_data/all_veg_data/locations_all.csv") %>%
   as_tibble()
 
-visits <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/visits_2015_2025.csv") %>%
+visits <- read.csv("data/raw_data/vegetation_data/all_veg_data/visits_all_2012_2025.csv") %>%
   as_tibble()
 
-tlu_Plant <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/tlu_Plant.csv") %>%
+tlu_Plant <- read.csv("data/raw_data/vegetation_data/all_veg_data/tlu_Plant.csv") %>%
   as_tibble()
+
+## NETN SEN site data (already processed) ##
+
+spplist_NETN_SEN <- read.csv("data/processed_data/vegetation_data/NETN_spplist_allsites_2011-2025_public.csv") %>% 
+  as_tibble()
+
 
 #--------------------------#
 ####    Run Function    ####
 #--------------------------#
 
-sumSpeciesList <- function(site = "all", panel = -1, years = 2015:2025,
+sumSpeciesList <- function(site = "all", panel = c(-1, 1:4), years = 2012:format(Sys.Date(), "%Y"),
                            QAQC = FALSE, species_type = "all", include_protected = T){
 
   #---- Error Handling ----
@@ -79,7 +85,7 @@ sumSpeciesList <- function(site = "all", panel = -1, years = 2015:2025,
   site <- if(any(site == "all")){site_list} else {site}
 
   stopifnot(class(panel) %in% c("numeric", "integer", "logical"), panel %in% c(1, 2, 3, 4, -1))
-  stopifnot(class(years) %in% c("numeric", "integer"), years >= 2015)
+  stopifnot(class(years) %in% c("numeric", "integer"), years >= 2012)
   stopifnot(class(QAQC) == "logical")
   species_type <- match.arg(species_type, c("all", "native", "exotic"))
   stopifnot(class(include_protected) == "logical")
@@ -127,10 +133,22 @@ sumSpeciesList <- function(site = "all", panel = -1, years = 2015:2025,
 
   }
 
+# view output
 species_list_result <- sumSpeciesList()
 print(species_list_result)
 
 
+
+## add SEN site veg data ##
+
+spplist_result_updated <- bind_rows(
+  species_list_result,
+  spplist_NETN_SEN %>%
+    filter(local_id == "GILM" | str_detect(Code, "304")) %>%
+    select(any_of(names(species_list_result)))
+)
+
 # Save outputs as CSV
-# write.csv(species_list_result, "data/processed_data/vegetation_data/FOA_species_list_2015_2025.csv", row.names = FALSE)
+# write.csv(spplist_result_updated, "data/processed_data/vegetation_data/FOA_NETN_spplist_2011_2025_20260324.csv", row.names = FALSE)
+
 
