@@ -1,6 +1,8 @@
-#### Biodiversity Data ####
+#### Biodiversity Data R Shiny app - iNat and ebird data ####
 
-#### iNat and ebird data -------------------------------------------------------
+#---------------------------------------------#
+####        Load Required Packages         ####
+#---------------------------------------------#
 
 library(shiny)
 library(bslib)
@@ -11,15 +13,17 @@ library(forcats)
 library(RColorBrewer)
 library(viridisLite)
 
-# Read & prepare processed data
+#-------------------------------------------#
+####    Read & Prepare Processed Data    ####
+#-------------------------------------------#
 
 # iNat data
-inat_data <- read.csv("data/raw_data/biodiversity_data/inat_greatmeadow_20250825.csv")
+inat_data <- read.csv("data/raw_data/biodiversity_data/inat_greatmeadow_20260326.csv")
 
 # eBird data
-eBird_data <- read.csv("data/raw_data/biodiversity_data/ebird_greatmeadow_20250825.csv")
+eBird_data <- read.csv("data/raw_data/biodiversity_data/ebird_greatmeadow_20260324.csv")
 
-eBird_tax <- read.csv("data/raw_data/biodiversity_data/eBird_taxonomy_v2024.csv")
+eBird_tax <- read.csv("data/raw_data/biodiversity_data/eBird_taxonomy_v2025.csv")
 
 # merge eBird data
 merged_data <- full_join(
@@ -29,8 +33,10 @@ merged_data <- full_join(
 ) %>% 
   filter(!is.na(SCIENTIFIC.NAME))
 
+#----------------#
+####    UI    ####
+#----------------#
 
-#UI
 ui <- page_fluid(
   theme = bs_theme(
     bootswatch = "flatly",
@@ -187,7 +193,10 @@ ui <- page_fluid(
   )
 )
 
-#SERVER
+#--------------------#
+####    SERVER    ####
+#--------------------#
+
 server <- function(input, output, session) {
   
   # Function to generate a palette for any number of categories
@@ -233,11 +242,13 @@ server <- function(input, output, session) {
   # ---- Species pie chart for iNaturalist ----
   spp_summary <- reactive({
     inat_data %>%
+      filter(
+        !is.na(taxon_species_name), taxon_species_name != "",
+        !is.na(iconic_taxon_name), iconic_taxon_name != "") %>%
       distinct(taxon_species_name, iconic_taxon_name) %>%
-      filter(!is.na(iconic_taxon_name), iconic_taxon_name != "") %>%
       count(iconic_taxon_name) %>%
-      arrange(desc(n)) %>%
-      mutate(percentage = round(n/sum(n) * 100, 1))
+      mutate(percentage = round(n / sum(n) * 100, 1)) %>%
+      arrange(desc(n))
   })
   
   output$spp_plot <- renderPlotly({
@@ -283,6 +294,9 @@ server <- function(input, output, session) {
   # ---- eBird species pie chart ----
   ebird_spp_summary <- reactive({
     df <- merged_data %>%
+      filter(CATEGORY.x == "species",
+             !is.na(SCIENTIFIC.NAME), SCIENTIFIC.NAME != "", 
+             !is.na(SPECIES_GROUP), SPECIES_GROUP != "") %>%
       distinct(SCIENTIFIC.NAME, SPECIES_GROUP) %>%
       count(SPECIES_GROUP) %>%
       mutate(SPECIES_GROUP = ifelse(n <= 2, "Other (1–2 species groups)", SPECIES_GROUP)) %>%
@@ -375,5 +389,7 @@ server <- function(input, output, session) {
   })
 }
 
+# Run app
 shinyApp(ui, server)
+
 
