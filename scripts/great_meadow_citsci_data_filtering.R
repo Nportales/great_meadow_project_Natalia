@@ -9,7 +9,7 @@ filter_to_geobounds <- function(dat, lat, long) {
   sf::sf_use_s2(FALSE)
   
   # Read in polygon of interest, in this case file path to great meadow
-  geo.bounds <- sf::read_sf("/Users/kylelima/Desktop/GreatMeadowBoundaries/GreatMeadowBoundaries.shp") %>%
+  geo.bounds <- sf::read_sf("data/raw_data/biodiversity_data/GreatMeadowBoundaries/GreatMeadowBoundaries.shp") %>%
     st_transform(4326)
 
   # Format data for filtering
@@ -31,18 +31,18 @@ filter_to_geobounds <- function(dat, lat, long) {
 
 
 ## Read in your raw data that is from a larger geographic area than the polygon of interest
-inat_raw <- read.csv("/Users/kylelima/Desktop/inaturalist_acad_obs_20250822.csv")
-ebird_raw <- read.delim("/Users/kylelima/Desktop/ebd_US-ME_relJul-2025.txt", header = T, quote = "")
+inat_raw <- read.csv("data/raw_data/biodiversity_data/great_meadow_citsci_data_20260324/inat_observations-700177.csv")
+ebird_raw <- read.delim("data/raw_data/biodiversity_data/great_meadow_citsci_data_20260324/ebd_US-ME-009_smp_relFeb-2026.txt", header = T, quote = "")
 
 
-## Filter the data to the geogrpahic bounds using the custom function
+## Filter the data to the geographic bounds using the custom function
 inat_gm <- filter_to_geobounds(inat_raw, lat = "latitude", long = "longitude")
 ebird_gm <- filter_to_geobounds(ebird_raw, lat = "LATITUDE", long = "LONGITUDE")
 
 
 ## Export
-write.csv(inat_gm, "/Users/kylelima/Desktop/inat_greatmeadow_20250825.csv", row.names = F)
-write.csv(ebird_gm, "/Users/kylelima/Desktop/ebird_greatmeadow_20250825.csv", row.names = F)
+write.csv(inat_gm, "data/raw_data/biodiversity_data/inat_greatmeadow_20260326.csv", row.names = F)
+write.csv(ebird_gm, "data/raw_data/biodiversity_data/ebird_greatmeadow_20260324.csv", row.names = F)
 
 
 
