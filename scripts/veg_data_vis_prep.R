@@ -20,10 +20,13 @@ library(ggplot2)
 
 ## FOA/NETN veg data ##
 
-VMMI <- read.csv("data/processed_data/vegetation_data/FOA_NETN_VMMI_2011_2025_20260324.csv") %>%
+vmmi <- read.csv("data/processed_data/vegetation_data/FOA_NETN_VMMI_2011_2025_20260324.csv") %>%
   as_tibble()
 
 spplist <- read.csv("data/processed_data/vegetation_data/FOA_NETN_spplist_2011_2025_20260324.csv") %>%
+  as_tibble()
+
+monitoring_sites <- read.csv("data/processed_data/monitoring_sites.csv") %>%
   as_tibble()
 
 #-----------------------#
@@ -32,7 +35,7 @@ spplist <- read.csv("data/processed_data/vegetation_data/FOA_NETN_spplist_2011_2
 
 ## prep VMMI data ## -----------------------------------------------------------
 
-new_VMMI <- VMMI %>% 
+new_vmmi <- vmmi%>% 
   
   mutate(
     
@@ -165,13 +168,72 @@ new_spplist <- spplist %>%
 #     ungroup()
 # }
 # 
-# check_coords_consistency(new_VMMI)
+# check_coords_consistency(new_vmmi)
 # 
 # check_coords_consistency(new_spplist)
 
 
 # Save outputs as CSV
-# write.csv(new_VMMI, "data/processed_data/vegetation_data/vis_FOA_NETN_VMMI_2011_2025_20260324.csv", row.names = FALSE)
+# write.csv(new_vmmi, "data/processed_data/vegetation_data/vis_FOA_NETN_VMMI_2011_2025_20260324.csv", row.names = FALSE)
 # write.csv(new_spplist, "data/processed_data/vegetation_data/vis_FOA_NETN_spplist_2011_2025_20260324.csv", row.names = FALSE)
 
+
+## VMMI dataset for arcgis map ## ----------------------------------------------
+
+# summarise across all years by site
+vmmi_summary <- new_vmmi %>%
+  group_by(site.name) %>%
+  summarise(
+    
+    # keep identifying info
+    local.id = first(local.id),
+    site.type = first(site.type),
+    wetland = first(wetland),
+    source = first(source),
+    
+    # coordinates
+    xcoord = mean(xcoord, na.rm = TRUE),
+    ycoord = mean(ycoord, na.rm = TRUE),
+    utm_zone = first(utm_zone),
+    latitude = mean(latitude, na.rm = TRUE),
+    longitude = mean(longitude, na.rm = TRUE),
+    
+    # year range instead of single year
+    year = paste0(min(year, na.rm = TRUE), "–", max(year, na.rm = TRUE)),
+    
+    # vmmi metrics (mean across years)
+    mean.coc = round(mean(mean.coc, na.rm = TRUE), 2),
+    inv.cov = round(mean(inv.cov, na.rm = TRUE), 2),
+    bryo.cov = round(mean(bryo.cov, na.rm = TRUE), 2),
+    strtol.cov = round(mean(strtol.cov, na.rm = TRUE), 2),
+    vmmi = round(mean(vmmi, na.rm = TRUE), 2),
+    
+    # assign rating based on averaged VMMI 
+    vmmi.rating = case_when(
+      vmmi > 60.94853 ~ "Good",
+      vmmi < 41.48136 ~ "Poor",
+      TRUE ~ "Fair"
+    ),
+    
+    # assign rating based on averaged VMMI (original rating thresholds)
+    vmmi.rating.orig = case_when(
+      vmmi > 65.22746 ~ "Good",
+      vmmi < 52.785 ~ "Poor",
+      TRUE ~ "Fair"
+    ),
+    
+    .groups = "drop"
+  ) %>% 
+  
+  left_join(
+    monitoring_sites %>%
+      select(site.name, display.site.name),
+    by = "site.name"
+  )
+
+# view result
+print(vmmi_summary)
+
+# write to CSV
+# write.csv(vmmi_summary, "data/processed_data/vegetation_data/vis_arcgis_VMMI_2011_2025_20260417.csv", row.names = FALSE)
 
