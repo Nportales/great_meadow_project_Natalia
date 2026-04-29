@@ -334,7 +334,8 @@ ggplot(vmmi_long, aes(x = wetland, y = value, fill = wetland)) +
 
 
 
-#### vegetation dashboard test visualizations ####------------------------------
+
+#### vegetation dashboard test visualizations (April 2026) ####-----------------
 
 # plot for average VMMI trends per wetland
 # first calculate average VMMI per year per wetland
@@ -460,7 +461,156 @@ ggplot(vmmi, aes(x = factor(year), y = vmmi)) +
        y = "VMMI") +
   theme_light()
 
-# vmmi mean with SD and n_sites -----------------------------------
+## vmmi mean with SD and n_sites -----------------------------------
+
+## summarize data
+wetland_vmmi_new <- vmmi %>%
+  group_by(wetland, year) %>%
+  summarise(
+    mean_vmmi = mean(vmmi, na.rm = TRUE),
+    sd_vmmi   = sd(vmmi, na.rm = TRUE),
+    n_sites   = n_distinct(site.name),
+    se_vmmi   = sd_vmmi / sqrt(n_sites),
+    .groups = "drop"
+  )
+
+## plot
+ggplot(wetland_vmmi_new, aes(x = year, y = mean_vmmi, color = wetland, group = wetland)) +
+  
+  geom_line(size = 1.2) +
+  
+  geom_errorbar(
+    data = subset(wetland_vmmi_new, n_sites > 1),
+    aes(
+    ymin = mean_vmmi - se_vmmi,
+    ymax = mean_vmmi + se_vmmi
+  ),
+  width = 0.2,
+  linewidth = 0.8) +
+  
+  geom_point(size = 3) +
+  
+  # number of sites labels
+  geom_text(aes(label = paste0("n=", n_sites)),
+            vjust = -1.2,
+            size = 3.5,
+            show.legend = FALSE) +
+  
+  # threshold lines
+  geom_hline(yintercept = 60.94853, linetype = "dashed", color = "green4") +
+  geom_hline(yintercept = 41.48136, linetype = "dashed", color = "red") +
+  
+  annotate("text",
+           x = max(wetland_vmmi$year),
+           y = 60.94853,
+           label = "Good",
+           color = "green4",
+           hjust = 1,
+           vjust = 1.5,
+           size = 4) +
+  
+  annotate("text",
+           x = max(wetland_vmmi$year),
+           y = 41.48136,
+           label = "Poor",
+           color = "red",
+           hjust = 1,
+           vjust = 1.5,
+           size = 4) +
+  
+  scale_color_manual(values = c(
+    "Great Meadow" = "black",
+    "Gilmore Meadow" = "grey67"
+  )) +
+  
+  labs(
+    title = "Average VMMI Trends by Wetland",
+    x = "Year",
+    y = "Mean VMMI",
+    color = "Wetland"
+  ) +
+  
+  theme_minimal()
+
+## plot with shading
+ggplot(wetland_vmmi_new, aes(x = year, y = mean_vmmi, color = wetland, group = wetland)) +
+  
+  # background shading first
+  annotate("rect",
+           xmin = -Inf, xmax = Inf,
+           ymin = -Inf, ymax = 41.48136,
+           fill = "red", alpha = 0.08) +
+  
+  annotate("rect",
+           xmin = -Inf, xmax = Inf,
+           ymin = 41.48136, ymax = 60.94853,
+           fill = "goldenrod", alpha = 0.04) +
+  
+  annotate("rect",
+           xmin = -Inf, xmax = Inf,
+           ymin = 60.94853, ymax = Inf,
+           fill = "green3", alpha = 0.08) +
+  
+  geom_line(size = 1.2) +
+  
+  geom_errorbar(
+    data = subset(wetland_vmmi_new, n_sites > 1),
+    aes(
+      ymin = mean_vmmi - se_vmmi,
+      ymax = mean_vmmi + se_vmmi
+    ),
+    width = 0.2,
+    linewidth = 0.8
+  ) +
+  
+  geom_point(size = 3) +
+  
+  geom_text(
+    aes(label = paste0("n=", n_sites)),
+    vjust = -1.2,
+    size = 3.5,
+    show.legend = FALSE
+  ) +
+  
+  # labels for zones
+  annotate("text",
+           x = min(wetland_vmmi_new$year),
+           y = 62,
+           label = "Good",
+           color = "darkgreen",
+           hjust = 0,
+           size = 4) +
+  
+  annotate("text",
+           x = min(wetland_vmmi_new$year),
+           y = 42.3,
+           label = "Fair",
+           color = "goldenrod4",
+           hjust = 0,
+           vjust = 0,
+           size = 4) +
+  
+  annotate("text",
+           x = min(wetland_vmmi_new$year),
+           y = 25,
+           label = "Poor",
+           color = "red3",
+           hjust = 0,
+           size = 4) +
+  
+  scale_color_manual(values = c(
+    "Great Meadow" = "black",
+    "Gilmore Meadow" = "grey67"
+  )) +
+  
+  labs(
+    title = "Average VMMI Trends by Wetland",
+    x = "Year",
+    y = "Mean VMMI",
+    color = "Wetland"
+  ) +
+  
+  theme_minimal()
 
 
 
@@ -493,13 +643,12 @@ ggplot(wl_summary, aes(x = year, y = mean_WL_mean, color = wetland, group = wetl
   theme_minimal()
 
 
-# test
+# trying a test function - water level hydrology stats
 wl_test <- wl_stats %>%
   group_by(wetland, year) %>%
   summarise(
     across(
-      c(WL_mean, WL_min, WL_max, max_inc, max_dec,
-        prop_GS_comp, GS_change,
+      c(WL_mean, WL_min, WL_max, max_inc, max_dec, GS_change,
         prop_over_0cm, prop_bet_0_neg30cm, prop_under_neg30cm),
       list(avg = ~mean(.x, na.rm = TRUE),
            sd  = ~sd(.x, na.rm = TRUE)),
@@ -525,27 +674,6 @@ grand_means <- wl_test %>%
     .groups = "drop"
   )
 
-# plot for Wl_mean
-ggplot(wl_test, aes(x = year, y = WL_mean_avg, color = wetland, group = wetland)) +
-  geom_line(linewidth = 1.2) +
-  geom_point(size = 3) +
-  
-  # variability across sites (within each year)
-  geom_errorbar(aes(ymin = WL_mean_avg - WL_mean_sd,
-                    ymax = WL_mean_avg + WL_mean_sd),
-                width = 0.2, alpha = 0.6) +
-  
-  # grand mean per wetland
-  geom_hline(data = grand_means,
-             aes(yintercept = grand_mean, color = wetland),
-             linetype = "dashed", linewidth = 1) +
-  
-  labs(title = "Wetland Mean Water Level Over Time",
-       x = "Year",
-       y = "Mean Water Level",
-       color = "Wetland") +
-  
-  theme_minimal()
 
 # plot for WL_sd
 ggplot(wl_test, aes(x = year, y = WL_sd_avg, color = wetland, group = wetland)) +
@@ -555,6 +683,11 @@ ggplot(wl_test, aes(x = year, y = WL_sd_avg, color = wetland, group = wetland)) 
   geom_hline(data = grand_means,
              aes(yintercept = WL_sd_avg_grand, color = wetland),
              linetype = "dashed") +
+  
+  scale_color_manual(values = c(
+    "Great Meadow" = "black",
+    "Gilmore Meadow" = "grey67"
+  )) +
   
   labs(title = "Within-Site Water Level Variability Over Time",
        x = "Year",
@@ -588,6 +721,15 @@ plot_wl_metric <- function(data, grand_data, metric, y_label, title) {
       linetype = "dashed", linewidth = 1
     ) +
     
+    scale_x_continuous(
+      breaks = seq(min(data$year), max(data$year), by = 1)
+    ) +
+    
+    scale_color_manual(values = c(
+      "Great Meadow" = "black",
+      "Gilmore Meadow" = "grey67"
+    )) +
+    
     labs(
       title = title,
       x = "Year",
@@ -599,8 +741,7 @@ plot_wl_metric <- function(data, grand_data, metric, y_label, title) {
 }
 
 metrics <- c("WL_mean", "WL_min", "WL_max",
-             "max_inc", "max_dec",
-             "prop_GS_comp", "GS_change",
+             "max_inc", "max_dec", "GS_change",
              "prop_over_0cm", "prop_bet_0_neg30cm", "prop_under_neg30cm")
 
 plots <- lapply(metrics, function(m) {
@@ -612,4 +753,102 @@ plots <- lapply(metrics, function(m) {
     title = paste(m, "Over Time")
   )
 })
+
+plots[[1]]
+plots[[2]]
+plots[[3]]
+plots[[4]]
+plots[[5]]
+#plots[[6]]
+plots[[7]]
+plots[[8]]
+plots[[9]]
+plots[[10]]
+
+
+
+#### t-tests for wl stats #### -------------------------------------------------
+
+
+#---------------------------------------------#
+# Paired t-tests using summarized wetland-year data
+# One row = one wetland in one year
+#---------------------------------------------#
+
+#---------------------------------------------#
+# Function to run paired t-test for one metric
+#---------------------------------------------#
+
+paired_wetland_ttest <- function(data, metric_name) {
+  
+  # reshape so each year has both wetlands in columns
+  temp <- data %>%
+    select(year, wetland, value = all_of(metric_name)) %>%
+    pivot_wider(
+      names_from = wetland,
+      values_from = value
+    ) %>%
+    drop_na(`Great Meadow`, `Gilmore Meadow`)
+  
+  # paired t-test
+  test <- t.test(
+    temp$`Great Meadow`,
+    temp$`Gilmore Meadow`,
+    paired = TRUE
+  )
+  
+  # return clean summary
+  tibble(
+    variable = metric_name,
+    n_years = nrow(temp),
+    great_mean = mean(temp$`Great Meadow`),
+    gilmore_mean = mean(temp$`Gilmore Meadow`),
+    mean_difference = mean(temp$`Great Meadow` - temp$`Gilmore Meadow`),
+    t_statistic = unname(test$statistic),
+    p_value = test$p.value,
+    conf_low = test$conf.int[1],
+    conf_high = test$conf.int[2]
+  )
+}
+
+#---------------------------------------------#
+# Example: test one variable
+#---------------------------------------------#
+
+paired_wetland_ttest(wl_summary, "mean_WL_mean")
+
+#---------------------------------------------#
+# Run tests for all metrics
+#---------------------------------------------#
+
+metrics <- c(
+  "mean_WL_mean",
+  "mean_WL_sd",
+  "mean_WL_min",
+  "mean_WL_max",
+  "mean_max_inc",
+  "mean_max_dec",
+  "mean_prop_GS_comp",
+  "mean_GS_change",
+  "mean_prop_over_0cm",
+  "mean_prop_bet_0_neg30cm",
+  "mean_prop_under_neg30cm"
+)
+
+results <- map_dfr(metrics, ~ paired_wetland_ttest(wl_summary, .x)) %>%
+  arrange(p_value)
+
+results
+
+#---------------------------------------------#
+# Optional: add significance column
+#---------------------------------------------#
+
+results <- results %>%
+  mutate(significant = if_else(p_value < 0.05, "Yes", "No"))
+
+results
+
+
+
 
