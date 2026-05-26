@@ -133,6 +133,17 @@ species_list_2015_2025 <- bind_rows(
     mutate(Collected = readr::parse_integer(Collected, na = c("", "NA", "19%"))),
   species_list_new %>%
     mutate(Collected = as.integer(Collected))) %>%
+  # Calculate quadrat frequency in cases it is missing
+  mutate(
+    quad_freq = if_else(
+      is.na(quad_freq),
+      rowSums(
+        across(c(Quadrat_NE, Quadrat_SE, Quadrat_SW, Quadrat_NW)),
+        na.rm = TRUE
+      ) * 25,
+      quad_freq
+    )
+  ) %>%
   format_dates(Date)
 
 # Locations

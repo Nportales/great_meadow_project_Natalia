@@ -23,7 +23,7 @@ library(ggplot2)
 vmmi <- read.csv("data/processed_data/vegetation_data/FOA_NETN_VMMI_2011_2025_20260324.csv") %>%
   as_tibble()
 
-spplist <- read.csv("data/processed_data/vegetation_data/FOA_NETN_spplist_2011_2025_20260324.csv") %>%
+spplist <- read.csv("data/processed_data/vegetation_data/FOA_NETN_spplist_2011_2025_20260526.csv") %>%
   as_tibble()
 
 monitoring_sites <- read.csv("data/processed_data/monitoring_sites.csv") %>%
@@ -175,7 +175,7 @@ new_spplist <- spplist %>%
 
 # Save outputs as CSV
 # write.csv(new_vmmi, "data/processed_data/vegetation_data/vis_FOA_NETN_VMMI_2011_2025_20260324.csv", row.names = FALSE)
-# write.csv(new_spplist, "data/processed_data/vegetation_data/vis_FOA_NETN_spplist_2011_2025_20260324.csv", row.names = FALSE)
+# write.csv(new_spplist, "data/processed_data/vegetation_data/vis_FOA_NETN_spplist_2011_2025_20260526.csv", row.names = FALSE)
 
 
 ## VMMI dataset for arcgis map ## ----------------------------------------------

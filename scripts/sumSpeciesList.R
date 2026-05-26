@@ -149,6 +149,6 @@ spplist_result_updated <- bind_rows(
 )
 
 # Save outputs as CSV
-# write.csv(spplist_result_updated, "data/processed_data/vegetation_data/FOA_NETN_spplist_2011_2025_20260324.csv", row.names = FALSE)
+# write.csv(spplist_result_updated, "data/processed_data/vegetation_data/FOA_NETN_spplist_2011_2025_20260526.csv", row.names = FALSE)
 
 
