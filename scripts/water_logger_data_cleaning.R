@@ -154,7 +154,7 @@ clean <- combined %>%
 
 
 ## Write out the clean data
-# write.csv(clean, "data/processed_data/hydrology_data/great_meadow_well_data_2025_20260304.csv", row.names = F)
+# write.csv(clean, "data/processed_data/hydrology_data/gm_well_data_2025_20260304.csv", row.names = F)
 
 
 
@@ -175,7 +175,7 @@ gilm <- tibble(read.csv("data/raw_data/hydrology_data/gilmore_well_prec_data_201
 
 
 ## Write out the clean data
-# write.csv(gilm, "data/processed_data/hydrology_data/gilmore_meadow_well_data_2025_20260304.csv", row.names = F)
+# write.csv(gilm, "data/processed_data/hydrology_data/gl_well_data_2025_20260127.csv", row.names = F)
 
 
 

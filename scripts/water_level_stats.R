@@ -16,7 +16,7 @@ library(lubridate)
 ## Read in the data and format for running through Kate's function
 
 ## Great Meadow 
-gmwell <- tibble(read.csv("data/processed_data/hydrology_data/great_meadow_well_data_2025_20260304.csv")) %>% 
+gmwell <- tibble(read.csv("data/processed_data/hydrology_data/gm_well_data_2025_20260304.csv")) %>% 
   rename(Date = date, Year = year, precip_cm = precip.cm) %>% 
   select(timestamp, Date, doy, Year, precip_cm, water.depth, lag.precip, hr, doy_h, plot.num) %>% 
   mutate(timestamp = as_datetime(timestamp),

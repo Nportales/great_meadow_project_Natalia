@@ -44,7 +44,7 @@ species_by_strata_FOA <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FO
 species_list_FOA <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/species_list_2015_2025.csv") %>%
   as_tibble()
 
-locations_FOA <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/locations.csv") %>%
+locations_FOA <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/locations_2015_2025.csv") %>%
   as_tibble()
 
 visits_FOA <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/visits_2015_2025.csv") %>%
@@ -58,7 +58,7 @@ RAM_stressors_FOA <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_ve
 
 AA_char_FOA <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/AA_char_2015_2025.csv")
 
-tlu_Plant_FOA <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/tlu_Plant.csv")
+tlu_Plant_FOA <- read.csv("data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/tlu_Plant_2015_2025.csv")
 
 
 ## 2011-new NETN veg data ##
@@ -150,6 +150,9 @@ veg_not_in_tlu <- veg_tsn %>%
     tlu_Plant_FOA %>% select(TSN) %>% distinct(),
     by = "TSN"
   )
+
+## If missing species are found, code needs to be added to add missing species/taxa (additions were not needed in the past hence no code). 
+## Check 1 is more like a double check there aren't species in the veg datasets not in tlu_Plant now that NETN data has been incorporated.
 
 ## 2: comprehensive check ## ---------------------------------------------------
 
@@ -330,10 +333,10 @@ qa_coords <- qa_check_coords(
 
 
 # Save outputs as CSV
-# write.csv(tlu_Plant_FOA, "data/raw_data/vegetation_data/all_veg_data/tlu_Plant.csv", row.names = FALSE)
+# write.csv(tlu_Plant_FOA, "data/raw_data/vegetation_data/all_veg_data/tlu_Plant_all_2012_2025.csv", row.names = FALSE)
 # write.csv(species_by_strata_all_updated, "data/raw_data/vegetation_data/all_veg_data/species_by_strata_all_2012_2025.csv", row.names = FALSE)
 # write.csv(species_list_all_updated, "data/raw_data/vegetation_data/all_veg_data/species_list_all_2012_2025.csv", row.names = FALSE)
-# write.csv(locations_all, "data/raw_data/vegetation_data/all_veg_data/locations_all.csv", row.names = FALSE)
+# write.csv(locations_all, "data/raw_data/vegetation_data/all_veg_data/locations_all_2012_2025.csv", row.names = FALSE)
 # write.csv(visits_all, "data/raw_data/vegetation_data/all_veg_data/visits_all_2012_2025.csv", row.names = FALSE)
 # write.csv(RAM_stressors_all, "data/raw_data/vegetation_data/all_veg_data/RAM_stressors_all_2012_2025.csv", row.names = FALSE)
 # write.csv(vertical_complexity_all, "data/raw_data/vegetation_data/all_veg_data/vertical_complexity_all_2012_2025.csv", row.names = FALSE)

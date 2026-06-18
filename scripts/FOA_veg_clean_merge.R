@@ -147,7 +147,7 @@ species_list_2015_2025 <- bind_rows(
   format_dates(Date)
 
 # Locations
-locations_clean <- locations_2023 %>% 
+locations_clean <- locations_new %>% 
   fix_coordinates("GRME02", 563071, 4913162, 44.36899, -68.20840) %>% 
   fix_coordinates("GRME08", 563371, 4912986, 44.36738, -68.20466) %>%
   format_dates(Date_Established)
@@ -606,10 +606,10 @@ result_strata <- sync_with_tlu(
   
 
 # Save outputs as CSV
-# write.csv(tlu_Plant_new_updated, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/tlu_Plant.csv", row.names = FALSE)
+# write.csv(tlu_Plant_new_updated, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/tlu_Plant_2015_2025.csv", row.names = FALSE)
 # write.csv(species_by_strata_updated, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/species_by_strata_2015_2025.csv", row.names = FALSE)
 # write.csv(species_lists_filled_updated, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/species_list_2015_2025.csv", row.names = FALSE)
-# write.csv(locations_clean, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/locations.csv", row.names = FALSE)
+# write.csv(locations_clean, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/locations_2015_2025.csv", row.names = FALSE)
 # write.csv(visits_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/visits_2015_2025.csv", row.names = FALSE)
 # write.csv(RAM_stressors_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/RAM_stressors_2015_2025.csv", row.names = FALSE)
 # write.csv(vertical_complexity_2015_2025, "data/raw_data/vegetation_data/FOA_veg_data/FOA_veg_data_2025/vertical_complexity_2015_2025.csv", row.names = FALSE)

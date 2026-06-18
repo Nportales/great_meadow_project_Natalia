@@ -48,7 +48,7 @@ species_by_strata <- read.csv("data/raw_data/vegetation_data/all_veg_data/specie
 species_list <- read.csv("data/raw_data/vegetation_data/all_veg_data/species_list_all_2012_2025.csv") %>%
   as_tibble()
 
-locations <- read.csv("data/raw_data/vegetation_data/all_veg_data/locations_all.csv") %>%
+locations <- read.csv("data/raw_data/vegetation_data/all_veg_data/locations_all_2012_2025.csv") %>%
   as_tibble()
 
 visits <- read.csv("data/raw_data/vegetation_data/all_veg_data/visits_all_2012_2025.csv") %>%

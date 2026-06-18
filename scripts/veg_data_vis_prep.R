@@ -173,12 +173,7 @@ new_spplist <- spplist %>%
 # check_coords_consistency(new_spplist)
 
 
-# Save outputs as CSV
-# write.csv(new_vmmi, "data/processed_data/vegetation_data/vis_FOA_NETN_VMMI_2011_2025_20260324.csv", row.names = FALSE)
-# write.csv(new_spplist, "data/processed_data/vegetation_data/vis_FOA_NETN_spplist_2011_2025_20260526.csv", row.names = FALSE)
-
-
-## VMMI dataset for arcgis map ## ----------------------------------------------
+## VMMI dataset for arcgis vegetation map ## -----------------------------------
 
 # summarise across all years by site
 vmmi_summary <- new_vmmi %>%
@@ -234,6 +229,12 @@ vmmi_summary <- new_vmmi %>%
 # view result
 print(vmmi_summary)
 
+
 # write to CSV
+# write.csv(new_vmmi, "data/processed_data/vegetation_data/vis_FOA_NETN_VMMI_2011_2025_20260324.csv", row.names = FALSE)
+# write.csv(new_spplist, "data/processed_data/vegetation_data/vis_FOA_NETN_spplist_2011_2025_20260526.csv", row.names = FALSE)
 # write.csv(vmmi_summary, "data/processed_data/vegetation_data/vis_arcgis_VMMI_2011_2025_20260417.csv", row.names = FALSE)
+
+
+
 
